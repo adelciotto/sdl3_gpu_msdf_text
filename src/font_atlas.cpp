@@ -74,7 +74,7 @@ bool font_atlas_load(
   {
     SDL_GPUTextureCreateInfo info = {};
     info.type                     = SDL_GPU_TEXTURETYPE_2D;
-    info.format                   = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    info.format                   = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB;
     info.width                    = font_atlas->width;
     info.height                   = font_atlas->height;
     info.layer_count_or_depth     = 1;

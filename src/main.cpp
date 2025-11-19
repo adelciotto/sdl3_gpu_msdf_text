@@ -124,8 +124,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
   auto copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
   if (!font_atlas_load(
           &as->font_atlas,
-          "resources/font_atlas.json",
-          "resources/font_atlas.png",
+          "resources/fonts/atlas_default.json",
+          "resources/fonts/atlas_default.png",
           as->device,
           copy_pass)) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font atlas");
