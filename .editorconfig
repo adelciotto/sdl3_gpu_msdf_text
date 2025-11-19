@@ -1,6 +1,6 @@
 root = true
 
-[*.{cpp,hpp}]
+[*.{cpp,hpp,hlsl}]
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true
