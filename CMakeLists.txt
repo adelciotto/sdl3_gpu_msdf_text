@@ -26,6 +26,8 @@ add_executable(${PROJECT_NAME}
   src/defer.hpp
   src/font_atlas.cpp
   src/font_atlas.hpp
+  src/imgui_font.cpp
+  src/imgui_font.hpp
   src/text_batch.cpp
   src/text_batch.hpp
   src/main.cpp

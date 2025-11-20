@@ -1,4 +1,5 @@
 #include "font_atlas.hpp"
+#include "imgui_font.hpp"
 
 #include <imgui/imgui_impl_sdl3.h>
 #include <imgui/imgui_impl_sdlgpu3.h>
@@ -14,6 +15,8 @@ struct App_State {
   SDL_GPUDevice* device;
   SDL_Window*    window;
   float          content_scale;
+
+  ImFont* imgui_font;
 
   Font_Atlas font_atlas;
 };
@@ -97,6 +100,14 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     ImGui::StyleColorsDark();
+
+    ImFontConfig font_cfg;
+    font_cfg.FontDataOwnedByAtlas = false;
+    as->imgui_font                = io.Fonts->AddFontFromMemoryCompressedTTF(
+        const_cast<unsigned char*>(IMGUI_FONT_DATA),
+        IMGUI_FONT_DATA_SIZE,
+        18.0f,
+        &font_cfg);
 
     on_display_content_scale_changed(as, content_scale);
   }
