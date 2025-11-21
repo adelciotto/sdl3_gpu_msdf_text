@@ -37,7 +37,11 @@ struct Text_Batch {
   SDL_GPUSampler*          sampler;
 };
 
-bool text_batch_create(Text_Batch* text_batch, SDL_GPUDevice* device);
+bool text_batch_create(
+    Text_Batch*          text_batch,
+    const std::string&   base_path,
+    SDL_GPUDevice*       device,
+    SDL_GPUTextureFormat swapchain_texture_format);
 void text_batch_destroy(Text_Batch* text_batch, SDL_GPUDevice* device);
 void text_batch_begin(
     Text_Batch*       text_batch,
@@ -46,9 +50,9 @@ void text_batch_begin(
     int               font_index = 0);
 void text_batch_end(Text_Batch* text_batch);
 void text_batch_prepare_draw_cmds(
-    Text_Batch*      text_batch,
-    SDL_GPUDevice*   device,
-    SDL_GPUCopyPass* copy_pass);
+    Text_Batch*           text_batch,
+    SDL_GPUDevice*        device,
+    SDL_GPUCommandBuffer* cmd_buf);
 void text_batch_render_draw_cmds(
     Text_Batch*           text_batch,
     SDL_GPUCommandBuffer* cmd_buf,

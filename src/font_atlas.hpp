@@ -31,9 +31,9 @@ struct Font_Atlas {
 };
 
 bool font_atlas_load(
-    Font_Atlas*      font_atlas,
-    const char*      json_file_path,
-    const char*      png_file_path,
-    SDL_GPUDevice*   device,
-    SDL_GPUCopyPass* copy_pass);
+    Font_Atlas*        font_atlas,
+    const std::string& base_path,
+    const char*        atlas_name,
+    SDL_GPUDevice*     device,
+    SDL_GPUCopyPass*   copy_pass);
 void font_atlas_destroy(Font_Atlas* font_atlas, SDL_GPUDevice* device);

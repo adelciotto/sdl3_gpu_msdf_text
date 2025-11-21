@@ -1,5 +1,6 @@
 #include "font_atlas.hpp"
 #include "imgui_font.hpp"
+#include "text_batch.hpp"
 
 #include <imgui/imgui_impl_sdl3.h>
 #include <imgui/imgui_impl_sdlgpu3.h>
@@ -11,7 +12,7 @@
 #include <stb_image.h>
 
 struct App_State {
-  const char*    base_path;
+  std::string    base_path;
   SDL_GPUDevice* device;
   SDL_Window*    window;
   float          content_scale;
@@ -19,6 +20,7 @@ struct App_State {
   ImFont* imgui_font;
 
   Font_Atlas font_atlas;
+  Text_Batch text_batch;
 };
 
 static void on_display_content_scale_changed(App_State* as, float content_scale) {
@@ -133,17 +135,21 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     return SDL_APP_FAILURE;
   }
   auto copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
-  if (!font_atlas_load(
-          &as->font_atlas,
-          "resources/fonts/atlas_default.json",
-          "resources/fonts/atlas_default.png",
-          as->device,
-          copy_pass)) {
+  if (!font_atlas_load(&as->font_atlas, as->base_path, "atlas_default", as->device, copy_pass)) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font atlas");
     return SDL_APP_FAILURE;
   }
   SDL_EndGPUCopyPass(copy_pass);
   SDL_SubmitGPUCommandBuffer(cmd_buf);
+
+  if (!text_batch_create(
+          &as->text_batch,
+          as->base_path,
+          as->device,
+          SDL_GetGPUSwapchainTextureFormat(as->device, as->window))) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create text batch");
+    return SDL_APP_FAILURE;
+  }
 
   return SDL_APP_CONTINUE;
 }
@@ -216,6 +222,8 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
   }
 
   if (swapchain_texture != nullptr && !is_minimized) {
+    text_batch_prepare_draw_cmds(&as->text_batch, as->device, cmd_buf);
+
     ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, cmd_buf);
 
     SDL_GPUColorTargetInfo target_info = {};
@@ -227,6 +235,8 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     target_info.layer_or_depth_plane   = 0;
     target_info.cycle                  = false;
     SDL_GPURenderPass* render_pass     = SDL_BeginGPURenderPass(cmd_buf, &target_info, 1, nullptr);
+
+    text_batch_render_draw_cmds(&as->text_batch, cmd_buf, render_pass);
 
     ImGui_ImplSDLGPU3_RenderDrawData(draw_data, cmd_buf, render_pass);
 
@@ -243,6 +253,7 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result) {
 
   SDL_WaitForGPUIdle(as->device);
 
+  text_batch_destroy(&as->text_batch, as->device);
   font_atlas_destroy(&as->font_atlas, as->device);
 
   ImGui_ImplSDL3_Shutdown();

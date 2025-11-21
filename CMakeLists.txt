@@ -23,7 +23,8 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(SDL)
 
 add_executable(${PROJECT_NAME}
-  src/defer.hpp
+  src/common.cpp
+  src/common.hpp
   src/font_atlas.cpp
   src/font_atlas.hpp
   src/imgui_font.cpp

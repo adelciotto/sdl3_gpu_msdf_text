@@ -1,6 +1,6 @@
 #include "font_atlas.hpp"
 
-#include "defer.hpp"
+#include "common.hpp"
 
 void from_json(const nlohmann::json& j, Font_Glyph_Bounds& bounds) {
   j.at("left").get_to(bounds.left);
@@ -35,36 +35,37 @@ void from_json(const nlohmann::json& j, Font_Atlas& font_atlas) {
 }
 
 bool font_atlas_load(
-    Font_Atlas*      font_atlas,
-    const char*      json_file_path,
-    const char*      png_file_path,
-    SDL_GPUDevice*   device,
-    SDL_GPUCopyPass* copy_pass) {
+    Font_Atlas*        font_atlas,
+    const std::string& base_path,
+    const char*        atlas_name,
+    SDL_GPUDevice*     device,
+    SDL_GPUCopyPass*   copy_pass) {
   SDL_assert(font_atlas != nullptr);
-  SDL_assert(json_file_path != nullptr);
-  SDL_assert(png_file_path != nullptr);
+  SDL_assert(atlas_name != nullptr);
   SDL_assert(device != nullptr);
   SDL_assert(copy_pass != nullptr);
 
-  std::ifstream file(json_file_path);
-  if (!file.is_open()) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to open file: %s", json_file_path);
+  auto        json_file_path = base_path + "/resources/fonts/" + atlas_name + ".json";
+  std::string json_file_contents;
+  if (!read_file_contents(json_file_path, &json_file_contents)) {
+    SDL_LogError(
+        SDL_LOG_CATEGORY_APPLICATION,
+        "Failed to read file contents: %s",
+        json_file_path.c_str());
     return false;
   }
 
-  nlohmann::json j;
-  file >> j;
-  file.close();
-
-  *font_atlas = j;
   try {
+    auto json   = nlohmann::json::parse(json_file_contents);
+    *font_atlas = json;
   } catch (const nlohmann::json::exception& e) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to parse json: %s", e.what());
     return false;
   }
 
   int  x, y, n;
-  auto pixels = stbi_load(png_file_path, &x, &y, &n, 4);
+  auto png_file_path = base_path + "/resources/fonts/" + atlas_name + ".png";
+  auto pixels        = stbi_load(png_file_path.c_str(), &x, &y, &n, 4);
   if (pixels == nullptr) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load image data from: %s", png_file_path);
     return false;
@@ -130,5 +131,4 @@ void font_atlas_destroy(Font_Atlas* font_atlas, SDL_GPUDevice* device) {
   SDL_assert(device != nullptr);
 
   SDL_ReleaseGPUTexture(device, font_atlas->texture);
-  *font_atlas = {};
 }
