@@ -1,6 +1,33 @@
-#include "font_atlas.hpp"
+struct Font_Glyph_Bounds {
+  float left;
+  float bottom;
+  float right;
+  float top;
+};
 
-#include "common.hpp"
+struct Font_Glyph {
+  int               unicode;
+  float             horizontal_advance;
+  Font_Glyph_Bounds plane_bounds;
+  Font_Glyph_Bounds atlas_bounds;
+  float             kerning;
+};
+
+struct Font_Variant {
+  std::unordered_map<int, Font_Glyph> glyphs;
+  float                               line_height;
+  float                               ascender;
+  float                               descender;
+};
+
+struct Font_Atlas {
+  std::vector<Font_Variant> variants;
+  float                     distance_range;
+  float                     size;
+  int                       width;
+  int                       height;
+  SDL_GPUTexture*           texture;
+};
 
 void from_json(const nlohmann::json& j, Font_Glyph_Bounds& bounds) {
   j.at("left").get_to(bounds.left);
@@ -22,19 +49,22 @@ void from_json(const nlohmann::json& j, Font_Variant& variant) {
   metrics_j.at("ascender").get_to(variant.ascender);
   metrics_j.at("descender").get_to(variant.descender);
 
-  j.at("glyphs").get_to(variant.glyphs);
+  std::vector<Font_Glyph> glyphs;
+  j.at("glyphs").get_to(glyphs);
+  for (const auto& glyph : glyphs) { variant.glyphs[glyph.unicode] = glyph; }
 }
 
 void from_json(const nlohmann::json& j, Font_Atlas& font_atlas) {
   auto atlas_j = j.at("atlas");
   atlas_j.at("distanceRange").get_to(font_atlas.distance_range);
+  atlas_j.at("size").get_to(font_atlas.size);
   atlas_j.at("width").get_to(font_atlas.width);
   atlas_j.at("height").get_to(font_atlas.height);
 
   j.at("variants").get_to(font_atlas.variants);
 }
 
-bool font_atlas_load(
+static bool font_atlas_load(
     Font_Atlas*        font_atlas,
     const std::string& base_path,
     const char*        atlas_name,
@@ -45,7 +75,7 @@ bool font_atlas_load(
   SDL_assert(device != nullptr);
   SDL_assert(copy_pass != nullptr);
 
-  auto        json_file_path = base_path + "/resources/fonts/" + atlas_name + ".json";
+  auto        json_file_path = base_path + "/" + atlas_name + ".json";
   std::string json_file_contents;
   if (!read_file_contents(json_file_path, &json_file_contents)) {
     SDL_LogError(
@@ -64,7 +94,7 @@ bool font_atlas_load(
   }
 
   int  x, y, n;
-  auto png_file_path = base_path + "/resources/fonts/" + atlas_name + ".png";
+  auto png_file_path = base_path + "/" + atlas_name + ".png";
   auto pixels        = stbi_load(png_file_path.c_str(), &x, &y, &n, 4);
   if (pixels == nullptr) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load image data from: %s", png_file_path);
@@ -75,7 +105,7 @@ bool font_atlas_load(
   {
     SDL_GPUTextureCreateInfo info = {};
     info.type                     = SDL_GPU_TEXTURETYPE_2D;
-    info.format                   = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB;
+    info.format                   = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     info.width                    = font_atlas->width;
     info.height                   = font_atlas->height;
     info.layer_count_or_depth     = 1;
@@ -127,7 +157,7 @@ bool font_atlas_load(
   return true;
 }
 
-void font_atlas_destroy(Font_Atlas* font_atlas, SDL_GPUDevice* device) {
+static void font_atlas_destroy(Font_Atlas* font_atlas, SDL_GPUDevice* device) {
   SDL_assert(device != nullptr);
 
   SDL_ReleaseGPUTexture(device, font_atlas->texture);

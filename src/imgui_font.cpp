@@ -1,10 +1,8 @@
 // clang-format off
 // File: 'Roboto-Medium.ttf' (162588 bytes)
 // Exported using binary_to_compressed_c.exe -u8 "Roboto-Medium.ttf" imgui_font
-
-#include "imgui_font.hpp"
-
-const unsigned char IMGUI_FONT_DATA[IMGUI_FONT_DATA_SIZE] =
+static constexpr unsigned int IMGUI_FONT_DATA_SIZE = 115741;
+static constexpr unsigned char IMGUI_FONT_DATA[IMGUI_FONT_DATA_SIZE] =
 {
     87,188,0,0,0,0,0,0,0,2,123,28,0,4,0,0,37,0,1,0,0,0,17,130,4,8,46,4,0,16,71,80,79,83,125,170,113,140,0,2,8,168,0,0,89,12,71,83,85,66,76,156,40,224,0,2,97,180,0,0,25,104,79,83,47,50,
     161,11,177,182,0,0,1,152,130,53,60,96,99,109,97,112,64,38,72,114,0,0,26,108,0,0,18,200,99,118,116,32,4,151,43,74,0,0,47,188,130,31,44,86,102,112,103,109,123,249,97,171,0,0,45,52,130,

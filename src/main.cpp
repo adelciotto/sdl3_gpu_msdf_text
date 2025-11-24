@@ -1,27 +1,42 @@
-#include "font_atlas.hpp"
-#include "imgui_font.hpp"
-#include "text_batch.hpp"
-
-#include <imgui/imgui_impl_sdl3.h>
-#include <imgui/imgui_impl_sdlgpu3.h>
-
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL_main.h>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+// TODOs:
+// - Setup scaffold for different examples.
+// - Option for user to change font variant.
+// - Support bg and fg colors.
+// - Support text anchoring.
+// - Implement first example, where user can change size, rotation, colors, anchoring.
+// - Add example and support for multi-line text. User can change line height.
+// - Add example and support for effects. Outline, 3D bevel effect, blurred shadow.
+// - Add example and support for 3D text.
+// - Add star wars 3D scroll example.
 
 struct App_State {
   std::string    base_path;
   SDL_GPUDevice* device;
   SDL_Window*    window;
   float          content_scale;
+  HMM_Vec2       window_size_pixels;
 
   ImFont* imgui_font;
 
   Font_Atlas font_atlas;
   Text_Batch text_batch;
+  HMM_Mat4   world_to_view_transform;
+  HMM_Mat4   view_to_clip_transform;
 };
+
+static void on_window_pixel_size_changed(App_State* as, int width, int height) {
+  as->window_size_pixels     = HMM_V2(width, height);
+  as->view_to_clip_transform = HMM_Orthographic_RH_NO(
+      0.0f,
+      as->window_size_pixels.X,
+      as->window_size_pixels.Y,
+      0.0f,
+      -1.0f,
+      1.0f);
+}
 
 static void on_display_content_scale_changed(App_State* as, float content_scale) {
   as->content_scale = content_scale;
@@ -46,8 +61,19 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
 
   as->base_path = SDL_GetBasePath();
 
-  as->device =
-      SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, nullptr);
+  SDL_GPUShaderFormat format_flags = 0;
+#ifdef SDL_PLATFORM_WINDOWS
+  format_flags |= SDL_GPU_SHADERFORMAT_DXIL;
+#elif SDL_PLATFORM_LINUX
+  format_flags |= SDL_GPU_SHADERFORMAT_SPIRV;
+#else
+#error "Platform not supported"
+#endif
+  bool debug = false;
+#ifdef BUILD_DEBUG
+  debug = true;
+#endif
+  as->device = SDL_CreateGPUDevice(format_flags, debug, nullptr);
   if (as->device == nullptr) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create gpu device: %s", SDL_GetError());
     return SDL_APP_FAILURE;
@@ -135,7 +161,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     return SDL_APP_FAILURE;
   }
   auto copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
-  if (!font_atlas_load(&as->font_atlas, as->base_path, "atlas_default", as->device, copy_pass)) {
+  if (!font_atlas_load(&as->font_atlas, as->base_path, "atlas_px4_d512", as->device, copy_pass)) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font atlas");
     return SDL_APP_FAILURE;
   }
@@ -151,6 +177,14 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     return SDL_APP_FAILURE;
   }
 
+  as->world_to_view_transform = HMM_M4D(1.0f);
+
+  {
+    int w, h;
+    SDL_GetWindowSizeInPixels(as->window, &w, &h);
+    on_window_pixel_size_changed(as, w, h);
+  }
+
   return SDL_APP_CONTINUE;
 }
 
@@ -162,6 +196,9 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
   switch (event->type) {
   case SDL_EVENT_QUIT:
     return SDL_APP_SUCCESS;
+  case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+    on_window_pixel_size_changed(as, event->window.data1, event->window.data2);
+    break;
   case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
     on_display_content_scale_changed(as, SDL_GetDisplayContentScale(event->display.displayID));
     break;
@@ -188,6 +225,16 @@ static void draw_imgui(App_State* as) {
 
 SDL_AppResult SDL_AppIterate(void* appstate) {
   auto as = static_cast<App_State*>(appstate);
+
+  auto world_to_clip_transform = as->view_to_clip_transform * as->world_to_view_transform;
+  text_batch_begin(&as->text_batch, world_to_clip_transform, &as->font_atlas, 1);
+  text_batch_draw(
+      &as->text_batch,
+      "Anthony",
+      as->window_size_pixels * 0.5f,
+      256.0f,
+      HMM_V4(1.0f, 1.0f, 1.0f, 1.0f));
+  text_batch_end(&as->text_batch);
 
   ImGui_ImplSDLGPU3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
@@ -231,9 +278,6 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     target_info.clear_color            = SDL_FColor {0.212f, 0.2f, 0.2f};
     target_info.load_op                = SDL_GPU_LOADOP_CLEAR;
     target_info.store_op               = SDL_GPU_STOREOP_STORE;
-    target_info.mip_level              = 0;
-    target_info.layer_or_depth_plane   = 0;
-    target_info.cycle                  = false;
     SDL_GPURenderPass* render_pass     = SDL_BeginGPURenderPass(cmd_buf, &target_info, 1, nullptr);
 
     text_batch_render_draw_cmds(&as->text_batch, cmd_buf, render_pass);

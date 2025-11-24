@@ -1,17 +1,8 @@
 root = true
 
-[*.{cpp,hpp,hlsl}]
+[*.{cpp,hpp,hlsl,bat,sh}]
 charset = utf-8
 end_of_line = lf
 insert_final_newline = true
 indent_style = space
 indent_size = 2
-
-[CMakeLists.txt]
-indent_style = space
-indent_size = 2
-end_of_line = lf
-charset = utf-8
-trim_trailing_whitespace = true
-insert_final_newline = true
-max_line_length = 80
