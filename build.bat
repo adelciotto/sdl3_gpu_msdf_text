@@ -12,9 +12,9 @@ if "%release%"=="1" set release=0 && echo [release mode]
 :: None for now...
 
 :: --- Compile/Link Definitions -----------------------------------------------
-set cl_common=/nologo /Zi /MD /EHsc /std:c++17 ^
+set cl_common=/nologo /MD /EHsc /std:c++17 ^
               /I..\src /I..\extern\HandmadeMath /I..\extern\SDL3\include /I..\extern\imgui /I..\extern\nlohmann /I..\extern\stb
-set cl_debug=call cl /Od /DBUILD_DEBUG=1 %cl_common%
+set cl_debug=call cl /Zi /Od /DBUILD_DEBUG=1 %cl_common%
 set cl_release=call cl /O2 /DBUILD_DEBUG=0 %cl_common%
 set cl_link=/link ..\extern\SDL3\lib\x64\SDL3.lib shell32.lib /subsystem:console
 if "%debug%"=="1" set cl_compile=%cl_debug%
@@ -34,8 +34,8 @@ if not exist build mkdir build
 :: --- Build Everything -------------------------------------------------------
 pushd build
 %msdf_atlas_gen% -font ..\fonts\MomoSignature-Regular.ttf -and -font ..\fonts\Oswald-Regular.ttf ^
-                 -type msdf -pxrange 4 -dimensions 512 512 -coloringstrategy inktrap -errorcorrection auto-full ^
-                 -imageout atlas_px4_d512.png -json atlas_px4_d512.json || exit /b 1
+                 -type msdf -size 64 -pxrange 4 -coloringstrategy inktrap -errorcorrection auto-full ^
+                 -imageout atlas_s64.png -json atlas_s64.json || exit /b 1
 %shadercross_vertex% ..\src\text_batch.hlsl -o text_batch.vert.dxil || exit /b 1
 %shadercross_fragment% ..\src\text_batch.hlsl -o text_batch.frag.dxil || exit /b 1
 %cl_compile% ..\src\sdl3_gpu_msdf_text.cpp ^

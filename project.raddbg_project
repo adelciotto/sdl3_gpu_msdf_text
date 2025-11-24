@@ -1,6 +1,7 @@
 // raddbg 0.9.22 project file
 
 recent_file: path: "src/main.cpp"
+recent_file: path: "src/text_batch.cpp"
 target:
 {
   executable: "sdl3_gpu_msdf_text.exe"

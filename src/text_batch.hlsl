@@ -3,7 +3,8 @@ struct Instance_Data {
   float3 position;
   float size;
   float4 rotation;
-  float4 color;
+  float4 fg_color;
+  float4 bg_color;
   float4 plane_bounds;
   float4 atlas_bounds;
 };
@@ -12,8 +13,9 @@ StructuredBuffer<Instance_Data> Data_Buffer : register(t0, space0);
 
 struct Output {
   float2 texcoord : TEXCOORD0;
-  float4 color : TEXCOORD1;
-  float size : TEXCOORD2;
+  float4 fg_color : TEXCOORD1;
+  float4 bg_color : TEXCOORD2;
+  float size : TEXCOORD3;
   float4 position : SV_Position;
 };
 
@@ -50,7 +52,8 @@ Output main(uint id: SV_VertexID) {
   Output output;
   output.position = mul(world_to_clip_transform, float4(vertex_position[vertex_index], instance.position.z, 1.0f));
   output.texcoord = vertex_texcoord[vertex_index];
-  output.color = instance.color;
+  output.fg_color = instance.fg_color;
+  output.bg_color = instance.bg_color;
   output.size = instance.size;
 
   return output;
@@ -63,8 +66,9 @@ SamplerState Sampler : register(s0, space2);
 
 struct Input {
   float2 texcoord : TEXCOORD0;
-  float4 color : TEXCOORD1;
-  float size : TEXCOORD2;
+  float4 fg_color : TEXCOORD1;
+  float4 bg_color : TEXCOORD2;
+  float size : TEXCOORD3;
 };
 
 cbuffer Uniform_Block : register(b0, space3) {
@@ -85,6 +89,6 @@ float4 main(Input input) : SV_Target0 {
   float sd = median(msd.r, msd.g, msd.b);
   float screen_px_distance = screen_pixel_range(input.size) * (sd - 0.5);
   float opacity = clamp(screen_px_distance + 0.5, 0.0, 1.0);
-  return lerp(float4(0.0f, 0.0f, 0.0f, 0.0f), input.color, opacity);
+  return lerp(input.bg_color, input.fg_color, opacity);
 }
 #endif
