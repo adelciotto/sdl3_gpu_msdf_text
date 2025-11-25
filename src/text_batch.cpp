@@ -22,9 +22,7 @@ enum Text_Batch_V_Align {
 struct Text_Batch_Instance {
   HMM_Vec3 position;
   float    size;
-  HMM_Quat rotation;
-  HMM_Vec4 fg_color;
-  HMM_Vec4 bg_color;
+  HMM_Vec4 color;
   HMM_Vec4 plane_bounds;
   HMM_Vec4 atlas_bounds;
 };
@@ -180,9 +178,9 @@ static bool text_batch_create(
     desc.blend_state.enable_blend          = true;
     desc.blend_state.color_blend_op        = SDL_GPU_BLENDOP_ADD;
     desc.blend_state.alpha_blend_op        = SDL_GPU_BLENDOP_ADD;
-    desc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    desc.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
     desc.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
-    desc.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    desc.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
     desc.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
 
     SDL_GPUGraphicsPipelineCreateInfo info     = {};
@@ -267,15 +265,21 @@ static void text_batch_end(Text_Batch* text_batch) {
 
 static float
 text_batch_string_width(const Font_Variant& font_data, const std::string& text, float size) {
-  float       width = 0.0f;
-  const char* ptr   = text.c_str();
+  float       width          = 0.0f;
+  const char* ptr            = text.c_str();
+  int         prev_codepoint = 0;
   while (*ptr) {
     Uint32 codepoint = SDL_StepUTF8(&ptr, nullptr);
-    if (codepoint == 0) { break; }
-    if (codepoint == SDL_INVALID_UNICODE_CODEPOINT) { continue; }
+    if (codepoint == 0 || codepoint == SDL_INVALID_UNICODE_CODEPOINT) { continue; }
 
     auto glyph_it = font_data.glyphs.find(codepoint);
     if (glyph_it == font_data.glyphs.end()) { continue; }
+
+    if (prev_codepoint != 0) {
+      auto kerning_it = font_data.kernings.find(std::make_pair(prev_codepoint, codepoint));
+      if (kerning_it != font_data.kernings.end()) { width += kerning_it->second * size; }
+    }
+    prev_codepoint = codepoint;
 
     width += glyph_it->second.horizontal_advance * size;
   }
@@ -287,15 +291,17 @@ static void text_batch_draw(
     const std::string& text,
     HMM_Vec2           position,
     float              size,
-    Text_Batch_H_Align h_align  = TEXT_BATCH_H_ALIGN_LEFT,
-    Text_Batch_V_Align v_align  = TEXT_BATCH_V_ALIGN_TOP,
-    HMM_Vec4           fg_color = HMM_V4(1.0f, 1.0f, 1.0f, 1.0f),
-    HMM_Vec4           bg_color = HMM_V4(0.0f, 0.0f, 0.0f, 0.0f)) {
+    Text_Batch_H_Align h_align       = TEXT_BATCH_H_ALIGN_LEFT,
+    Text_Batch_V_Align v_align       = TEXT_BATCH_V_ALIGN_TOP,
+    HMM_Vec4           color         = HMM_V4(1.0f, 1.0f, 1.0f, 1.0f),
+    HMM_Vec4           outline_color = HMM_V4(0.0f, 0.0f, 0.0f, 1.0f),
+    float              outline_width = 4.0f) {
   SDL_assert(text_batch != nullptr);
   SDL_assert(text_batch->begin_called);
 
-  auto& draw_cmd = text_batch->draw_cmds[text_batch->draw_cmds_count - 1];
-  if (draw_cmd.instances_count + text.size() >= TEXT_BATCH_MAX_INSTANCES_PER_DRAW_CMD) {
+  auto  glyphs_count = SDL_utf8strnlen(text.c_str(), text.size());
+  auto& draw_cmd     = text_batch->draw_cmds[text_batch->draw_cmds_count - 1];
+  if (draw_cmd.instances_count + glyphs_count >= TEXT_BATCH_MAX_INSTANCES_PER_DRAW_CMD) {
     text_batch_push_draw_cmd(
         text_batch,
         draw_cmd.world_to_clip_transform,
@@ -333,30 +339,37 @@ static void text_batch_draw(
     break;
   }
 
-  const char* ptr = text.c_str();
+  const char* ptr            = text.c_str();
+  int         prev_codepoint = 0;
   while (*ptr) {
     Uint32 codepoint = SDL_StepUTF8(&ptr, nullptr);
-    if (codepoint == 0) { break; }
-    if (codepoint == SDL_INVALID_UNICODE_CODEPOINT) { continue; }
+    if (codepoint == 0 || codepoint == SDL_INVALID_UNICODE_CODEPOINT) { continue; }
 
     auto glyph_it = font_data.glyphs.find(codepoint);
     if (glyph_it == font_data.glyphs.end()) { continue; }
+
+    if (prev_codepoint != 0) {
+      auto kerning_it = font_data.kernings.find(std::make_pair(prev_codepoint, codepoint));
+      if (kerning_it != font_data.kernings.end()) {
+        current_position.X += kerning_it->second * size;
+      }
+    }
+    prev_codepoint = codepoint;
 
     auto& instance = text_batch->instances[text_batch->total_instances_count];
     text_batch->total_instances_count += 1;
     draw_cmd.instances_count += 1;
 
-    instance.position     = HMM_V3(current_position.X, current_position.Y, 0.0f);
-    instance.size         = size;
-    instance.rotation     = HMM_Q(0.0f, 0.0f, 0.0f, 1.0f);
-    instance.fg_color     = fg_color;
-    instance.bg_color     = bg_color;
+    instance.position = HMM_V3(current_position.X, current_position.Y, 0.0f);
+    instance.size     = size;
+    instance.color    = color;
+    // instance.outline_color = outline_color;
+    // instance.outline_width = outline_width;
     instance.plane_bounds = HMM_V4(
         glyph_it->second.plane_bounds.left,
         glyph_it->second.plane_bounds.top,
         glyph_it->second.plane_bounds.right,
         glyph_it->second.plane_bounds.bottom);
-
     float atlas_width     = static_cast<float>(draw_cmd.font_atlas->width);
     float atlas_height    = static_cast<float>(draw_cmd.font_atlas->height);
     instance.atlas_bounds = HMM_V4(
@@ -365,7 +378,7 @@ static void text_batch_draw(
         glyph_it->second.atlas_bounds.right / atlas_width,
         1.0f - (glyph_it->second.atlas_bounds.bottom / atlas_height));
 
-    current_position.X += (glyph_it->second.horizontal_advance * size);
+    current_position.X += glyph_it->second.horizontal_advance * size;
   }
 }
 
@@ -374,7 +387,7 @@ static void text_batch_draw(
     const std::string& text,
     HMM_Vec2           position,
     float              size,
-    HMM_Vec4           fg_color) {
+    HMM_Vec4           color) {
   text_batch_draw(
       text_batch,
       text,
@@ -382,7 +395,7 @@ static void text_batch_draw(
       size,
       TEXT_BATCH_H_ALIGN_LEFT,
       TEXT_BATCH_V_ALIGN_TOP,
-      fg_color);
+      color);
 }
 
 static void text_batch_prepare_draw_cmds(

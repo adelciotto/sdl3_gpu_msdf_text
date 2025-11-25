@@ -2,7 +2,7 @@
 #include <SDL3/SDL_main.h>
 
 // TODOs:
-// - Implement kerning.
+// - Skip whitespace char.
 // - Add example and support for multi-line text. User can change line height.
 // - Add example and support for effects. Outline, 3D bevel effect, blurred shadow.
 // - Add example and support for 3D text.
@@ -51,14 +51,17 @@ struct App_State {
   Font_Atlas      font_atlases[FONT_ATLAS_KIND_COUNT];
   Text_Batch      text_batch;
   Demo_Kind       demo_kind;
+  HMM_Vec4        bg_color                = HMM_V4(0.97f, 0.95f, 0.86f, 1.0f);
   HMM_Mat4        world_to_view_transform = HMM_M4D(1.0f);
   HMM_Mat4        view_to_clip_transform  = HMM_M4D(1.0f);
   struct {
-    float              text_size     = 120.0f;
-    Text_Batch_H_Align text_h_align  = TEXT_BATCH_H_ALIGN_CENTER;
-    Text_Batch_V_Align text_v_align  = TEXT_BATCH_V_ALIGN_BASELINE;
-    HMM_Vec4           text_fg_color = HMM_V4(1.0f, 1.0f, 1.0f, 1.0f);
-    HMM_Vec4           text_bg_color = HMM_V4(0.0f, 0.0f, 0.0f, 0.0f);
+    std::string        text               = "Example Text!";
+    float              text_size          = 120.0f;
+    Text_Batch_H_Align text_h_align       = TEXT_BATCH_H_ALIGN_CENTER;
+    Text_Batch_V_Align text_v_align       = TEXT_BATCH_V_ALIGN_BASELINE;
+    HMM_Vec4           text_color         = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
+    HMM_Vec4           text_outline_color = HMM_V4(0.998f, 0.9976f, 0.996f, 1.0f);
+    float              text_outline_width = 0.0f;
   } demo_basic;
 };
 
@@ -287,20 +290,21 @@ static void draw_demo(App_State* as) {
         as->font_variant);
     text_batch_draw(
         &as->text_batch,
-        "Sample Text!",
+        as->demo_basic.text,
         as->window_size_pixels * 0.5f,
         as->demo_basic.text_size,
         as->demo_basic.text_h_align,
         as->demo_basic.text_v_align,
-        as->demo_basic.text_fg_color,
-        as->demo_basic.text_bg_color);
+        as->demo_basic.text_color,
+        as->demo_basic.text_outline_color,
+        as->demo_basic.text_outline_width);
     text_batch_end(&as->text_batch);
   } break;
   }
 }
 
 static void draw_imgui(App_State* as) {
-  if (ImGui::Begin("SDL3 GPU MSDF Text Demo")) {
+  if (ImGui::Begin("SDL3 GPU MSDF Text Demo", nullptr, ImGuiWindowFlags_HorizontalScrollbar)) {
     static constexpr const char* demo_kind_strings[DEMO_KIND_COUNT] = {
         "Basic",
     };
@@ -314,16 +318,40 @@ static void draw_imgui(App_State* as) {
       }
       ImGui::EndCombo();
     }
+    ImGui::ColorEdit4("Background Color", &as->bg_color.X);
+    ImGui::Separator();
+
+    auto& io = ImGui::GetIO();
+    ImGui::Text(
+        "Application average %.3f ms/frame (%.1f FPS)",
+        1000.0f / io.Framerate,
+        io.Framerate);
 
     if (ImGui::CollapsingHeader("Demo Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
       const auto& font_atlas = as->font_atlases[as->font_atlas_kind];
 
       switch (as->demo_kind) {
       case DEMO_KIND_BASIC: {
+        auto resize_callback = [](ImGuiInputTextCallbackData* data) {
+          if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
+            auto str = static_cast<std::string*>(data->UserData);
+            str->resize(data->BufTextLen);
+            data->Buf = str->data();
+          }
+          return 0;
+        };
+        ImGui::InputText(
+            "Text",
+            as->demo_basic.text.data(),
+            as->demo_basic.text.capacity() + 1,
+            ImGuiInputTextFlags_CallbackResize,
+            resize_callback,
+            &as->demo_basic.text);
+
         ImGui::SliderFloat(
             "Text Size",
             &as->demo_basic.text_size,
-            font_atlas.size,
+            font_atlas.size * 0.5f,
             font_atlas.size * 4.0f,
             "%.0f");
 
@@ -364,8 +392,14 @@ static void draw_imgui(App_State* as) {
           ImGui::EndCombo();
         }
 
-        ImGui::ColorEdit4("Text Foreground Color", &as->demo_basic.text_fg_color.X);
-        ImGui::ColorEdit4("Text Background Color", &as->demo_basic.text_bg_color.X);
+        ImGui::ColorEdit4("Text Color", &as->demo_basic.text_color.X);
+        ImGui::ColorEdit4("Text Outline Color", &as->demo_basic.text_outline_color.X);
+        ImGui::SliderFloat(
+            "Text Outline Width",
+            &as->demo_basic.text_outline_width,
+            0.0f,
+            10.0f,
+            "%.0f");
 
         ImGui::LabelText(
             "Screen Pixel Range",
@@ -376,6 +410,7 @@ static void draw_imgui(App_State* as) {
         break;
       }
     }
+    ImGui::Separator();
 
     if (ImGui::CollapsingHeader("Font Atlas", ImGuiTreeNodeFlags_DefaultOpen)) {
       static constexpr const char* font_atlas_kind_strings[FONT_ATLAS_KIND_COUNT] = {
@@ -425,7 +460,7 @@ static void draw_imgui(App_State* as) {
           ImGui::EndCombo();
         }
       } break;
-      case FONT_ATLAS_KIND_PLAYWRITE:
+      case FONT_ATLAS_KIND_SCIENCE_GOTHIC:
         if (ImGui::BeginCombo(
                 "Font Variant Selection",
                 font_science_gothic_variant_strings[as->font_variant])) {
@@ -497,10 +532,10 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
     SDL_GPUColorTargetInfo target_info = {};
     target_info.texture                = swapchain_texture;
-    target_info.clear_color            = SDL_FColor {0.212f, 0.2f, 0.2f};
-    target_info.load_op                = SDL_GPU_LOADOP_CLEAR;
-    target_info.store_op               = SDL_GPU_STOREOP_STORE;
-    SDL_GPURenderPass* render_pass     = SDL_BeginGPURenderPass(cmd_buf, &target_info, 1, nullptr);
+    target_info.clear_color = {as->bg_color.R, as->bg_color.G, as->bg_color.B, as->bg_color.A};
+    target_info.load_op     = SDL_GPU_LOADOP_CLEAR;
+    target_info.store_op    = SDL_GPU_STOREOP_STORE;
+    SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(cmd_buf, &target_info, 1, nullptr);
 
     text_batch_render_draw_cmds(&as->text_batch, cmd_buf, render_pass);
 

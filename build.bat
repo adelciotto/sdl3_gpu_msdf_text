@@ -6,7 +6,7 @@ cd /D "%~dp0"
 for %%a in (%*) do set "%%~a=1"
 if not "%release%"=="1" set debug=1
 if "%debug%"=="1" set release=0 && echo [debug mode]
-if "%release%"=="1" set release=1 && echo [release mode]
+if "%release%"=="1" set debug=0 && echo [release mode]
 if not "%skipfonts%"=="1" set buildfonts=1
 if "%skipfonts%"=="1" echo [skipping font atlas generation]
 
@@ -29,7 +29,7 @@ set shadercross_fragment=%shadercross% -t fragment -DFRAGMENT_SHADER
 
 :: --- Font Atlas Build Definitions -------------------------------------------
 set msdf_atlas_gen=call ..\tools\msdf_atlas_gen\msdf_atlas_gen.exe
-set msdf_common=-type msdf -pxrange 4 -dimensions 1024 1024 -coloringstrategy inktrap -errorcorrection auto-full 
+set msdf_common=-type msdf -size 64 -pxrange 4 -coloringstrategy inktrap -errorcorrection auto-full 
 
 :: --- Prep Directories -------------------------------------------------------
 if not exist build mkdir build

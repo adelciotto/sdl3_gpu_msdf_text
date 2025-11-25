@@ -2,9 +2,7 @@
 struct Instance_Data {
   float3 position;
   float size;
-  float4 rotation;
-  float4 fg_color;
-  float4 bg_color;
+  float4 color;
   float4 plane_bounds;
   float4 atlas_bounds;
 };
@@ -13,9 +11,8 @@ StructuredBuffer<Instance_Data> Data_Buffer : register(t0, space0);
 
 struct Output {
   float2 texcoord : TEXCOORD0;
-  float4 fg_color : TEXCOORD1;
-  float4 bg_color : TEXCOORD2;
-  float size : TEXCOORD3;
+  nointerpolation float4 color : TEXCOORD1;
+  nointerpolation float size : TEXCOORD2;
   float4 position : SV_Position;
 };
 
@@ -52,9 +49,8 @@ Output main(uint id: SV_VertexID) {
   Output output;
   output.position = mul(world_to_clip_transform, float4(vertex_position[vertex_index], instance.position.z, 1.0f));
   output.texcoord = vertex_texcoord[vertex_index];
-  output.fg_color = instance.fg_color;
-  output.bg_color = instance.bg_color;
   output.size = instance.size;
+  output.color = instance.color;
 
   return output;
 }
@@ -66,9 +62,8 @@ SamplerState Sampler : register(s0, space2);
 
 struct Input {
   float2 texcoord : TEXCOORD0;
-  float4 fg_color : TEXCOORD1;
-  float4 bg_color : TEXCOORD2;
-  float size : TEXCOORD3;
+  nointerpolation float4 color : TEXCOORD1;
+  nointerpolation float size : TEXCOORD2;
 };
 
 cbuffer Uniform_Block : register(b0, space3) {
@@ -77,7 +72,7 @@ cbuffer Uniform_Block : register(b0, space3) {
 }
 
 float screen_pixel_range(float size) {
-  return size / font_size * 2.0f;
+  return size / font_size * pixel_range;
 }
 
 float median(float r, float g, float b) {
@@ -87,8 +82,12 @@ float median(float r, float g, float b) {
 float4 main(Input input) : SV_Target0 {
   float3 msd = Texture.Sample(Sampler, input.texcoord).rgb;
   float sd = median(msd.r, msd.g, msd.b);
-  float screen_px_distance = screen_pixel_range(input.size) * (sd - 0.5);
-  float opacity = clamp(screen_px_distance + 0.5, 0.0, 1.0);
-  return lerp(input.bg_color, input.fg_color, opacity);
+  float screen_px_dist = screen_pixel_range(input.size) * (sd - 0.5);
+  float opacity = clamp(screen_px_dist + 0.5, 0.0, 1.0);
+
+  float4 color = input.color;
+  color.a *= opacity;
+  color.rgb *= color.a;
+  return color;
 }
 #endif

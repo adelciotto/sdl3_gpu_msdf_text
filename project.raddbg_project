@@ -1,7 +1,7 @@
 // raddbg 0.9.22 project file
 
-recent_file: path: "src/main.cpp"
 recent_file: path: "src/text_batch.cpp"
+recent_file: path: "src/main.cpp"
 target:
 {
   executable: "sdl3_gpu_msdf_text.exe"
@@ -10,11 +10,11 @@ target:
 target:
 {
   executable: "build/debug/sdl3_gpu_msdf_text.exe"
-  working_directory: "build/debug/"
+  working_directory: "build/debug"
 }
 target:
 {
   executable: "build/sdl3_gpu_msdf_text.exe"
-  working_directory: "build/"
+  working_directory: build
   enabled: 1
 }

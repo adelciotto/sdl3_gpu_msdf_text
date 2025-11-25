@@ -10,14 +10,28 @@ struct Font_Glyph {
   float             horizontal_advance;
   Font_Glyph_Bounds plane_bounds;
   Font_Glyph_Bounds atlas_bounds;
-  float             kerning;
+};
+
+struct Font_Kerning {
+  int   unicode1;
+  int   unicode2;
+  float advance;
+};
+
+struct Pair_Int_Hash {
+  size_t operator()(const std::pair<int, int>& p) const {
+    size_t h1 = std::hash<int> {}(p.first);
+    size_t h2 = std::hash<int> {}(p.second);
+    return h1 ^ (h2 << 1);
+  }
 };
 
 struct Font_Variant {
-  std::unordered_map<int, Font_Glyph> glyphs;
-  float                               line_height;
-  float                               ascender;
-  float                               descender;
+  std::unordered_map<int, Font_Glyph>                           glyphs;
+  std::unordered_map<std::pair<int, int>, float, Pair_Int_Hash> kernings;
+  float                                                         line_height;
+  float                                                         ascender;
+  float                                                         descender;
 };
 
 struct Font_Atlas {
@@ -43,6 +57,12 @@ void from_json(const nlohmann::json& j, Font_Glyph& glyph) {
   if (j.contains("atlasBounds")) { j.at("atlasBounds").get_to(glyph.atlas_bounds); }
 }
 
+void from_json(const nlohmann::json& j, Font_Kerning& kerning) {
+  j.at("unicode1").get_to(kerning.unicode1);
+  j.at("unicode2").get_to(kerning.unicode2);
+  j.at("advance").get_to(kerning.advance);
+}
+
 void from_json(const nlohmann::json& j, Font_Variant& variant) {
   auto metrics_j = j.at("metrics");
   metrics_j.at("lineHeight").get_to(variant.line_height);
@@ -52,6 +72,12 @@ void from_json(const nlohmann::json& j, Font_Variant& variant) {
   std::vector<Font_Glyph> glyphs;
   j.at("glyphs").get_to(glyphs);
   for (const auto& glyph : glyphs) { variant.glyphs[glyph.unicode] = glyph; }
+
+  std::vector<Font_Kerning> kernings;
+  j.at("kerning").get_to(kernings);
+  for (const auto& kerning : kernings) {
+    variant.kernings[std::make_pair(kerning.unicode1, kerning.unicode2)] = kerning.advance;
+  }
 }
 
 void from_json(const nlohmann::json& j, Font_Atlas& font_atlas) {
