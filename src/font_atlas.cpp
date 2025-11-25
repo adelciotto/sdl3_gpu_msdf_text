@@ -61,7 +61,12 @@ void from_json(const nlohmann::json& j, Font_Atlas& font_atlas) {
   atlas_j.at("width").get_to(font_atlas.width);
   atlas_j.at("height").get_to(font_atlas.height);
 
-  j.at("variants").get_to(font_atlas.variants);
+  if (j.contains("variants")) {
+    j.at("variants").get_to(font_atlas.variants);
+  } else {
+    auto& font_variant = font_atlas.variants.emplace_back();
+    from_json(j, font_variant);
+  }
 }
 
 static bool font_atlas_load(

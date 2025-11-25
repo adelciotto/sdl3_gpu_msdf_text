@@ -6,7 +6,9 @@ cd /D "%~dp0"
 for %%a in (%*) do set "%%~a=1"
 if not "%release%"=="1" set debug=1
 if "%debug%"=="1" set release=0 && echo [debug mode]
-if "%release%"=="1" set release=0 && echo [release mode]
+if "%release%"=="1" set release=1 && echo [release mode]
+if not "%skipfonts%"=="1" set buildfonts=1
+if "%skipfonts%"=="1" echo [skipping font atlas generation]
 
 :: --- Unpack Command line Build Arguments ------------------------------------
 :: None for now...
@@ -26,16 +28,32 @@ set shadercross_vertex=%shadercross% -t vertex -DVERTEX_SHADER
 set shadercross_fragment=%shadercross% -t fragment -DFRAGMENT_SHADER
 
 :: --- Font Atlas Build Definitions -------------------------------------------
-set msdf_atlas_gen=call ..\tools\msdf_atlas_gen\msdf_atlas_gen.exe 
+set msdf_atlas_gen=call ..\tools\msdf_atlas_gen\msdf_atlas_gen.exe
+set msdf_common=-type msdf -pxrange 4 -dimensions 1024 1024 -coloringstrategy inktrap -errorcorrection auto-full 
 
 :: --- Prep Directories -------------------------------------------------------
 if not exist build mkdir build
 
 :: --- Build Everything -------------------------------------------------------
 pushd build
-%msdf_atlas_gen% -font ..\fonts\MomoSignature-Regular.ttf -and -font ..\fonts\Oswald-Regular.ttf ^
-                 -type msdf -size 64 -pxrange 4 -coloringstrategy inktrap -errorcorrection auto-full ^
-                 -imageout atlas_s64.png -json atlas_s64.json || exit /b 1
+
+if "%buildfonts%"=="1" (
+  %msdf_atlas_gen% -font ..\fonts\Roboto-Regular.ttf ^
+                   -and -font ..\fonts\Roboto-Bold.ttf ^
+                   -and -font ..\fonts\Roboto-Italic.ttf ^
+                   -and -font ..\fonts\Roboto-BoldItalic.ttf ^
+                   -and -font ..\fonts\Roboto-Light.ttf ^
+                   %msdf_common% ^
+                   -imageout roboto.png -json roboto.json || exit /b 1
+  %msdf_atlas_gen% -font ..\fonts\ScienceGothic-Regular.ttf ^
+                   -and -font ..\fonts\ScienceGothic-Bold.ttf ^
+                   -and -font ..\fonts\ScienceGothic-Light.ttf ^
+                   %msdf_common% ^
+                   -imageout science_gothic.png -json science_gothic.json || exit /b 1
+  %msdf_atlas_gen% -font ..\fonts\PlaywriteUSTradGuides-Regular.ttf ^
+                   %msdf_common% ^
+                   -imageout playwrite.png -json playwrite.json || exit /b 1
+)
 %shadercross_vertex% ..\src\text_batch.hlsl -o text_batch.vert.dxil || exit /b 1
 %shadercross_fragment% ..\src\text_batch.hlsl -o text_batch.frag.dxil || exit /b 1
 %cl_compile% ..\src\sdl3_gpu_msdf_text.cpp ^

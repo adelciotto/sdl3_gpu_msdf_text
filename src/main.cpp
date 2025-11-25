@@ -13,10 +13,27 @@ enum Demo_Kind {
   DEMO_KIND_COUNT,
 };
 
-enum Font_Kind {
-  FONT_KIND_MOMO_SIGNATURE_REGULAR,
-  FONT_KIND_OSWALD_REGULAR,
-  FONT_KIND_COUNT,
+enum Font_Atlas_Kind {
+  FONT_ATLAS_KIND_ROBOTO,
+  FONT_ATLAS_KIND_SCIENCE_GOTHIC,
+  FONT_ATLAS_KIND_PLAYWRITE,
+  FONT_ATLAS_KIND_COUNT,
+};
+
+enum Font_Atlas_Roboto_Variant {
+  FONT_ATLAS_ROBOTO_VARIANT_REGULAR,
+  FONT_ATLAS_ROBOTO_VARIANT_BOLD,
+  FONT_ATLAS_ROBOTO_VARIANT_ITALIC,
+  FONT_ATLAS_ROBOTO_VARIANT_BOLD_ITALIC,
+  FONT_ATLAS_ROBOTO_VARIANT_LIGHT,
+  FONT_ATLAS_ROBOTO_VARIANT_COUNT,
+};
+
+enum Font_Atlas_Science_Gothic_Variant {
+  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_REGULAR,
+  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_BOLD,
+  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_LIGHT,
+  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_COUNT,
 };
 
 struct App_State {
@@ -29,12 +46,13 @@ struct App_State {
 
   ImFont* imgui_font;
 
-  Font_Atlas font_atlas;
-  Text_Batch text_batch;
-  Font_Kind  font_kind;
-  Demo_Kind  demo_kind;
-  HMM_Mat4   world_to_view_transform = HMM_M4D(1.0f);
-  HMM_Mat4   view_to_clip_transform  = HMM_M4D(1.0f);
+  Font_Atlas_Kind font_atlas_kind;
+  int             font_variant;
+  Font_Atlas      font_atlases[FONT_ATLAS_KIND_COUNT];
+  Text_Batch      text_batch;
+  Demo_Kind       demo_kind;
+  HMM_Mat4        world_to_view_transform = HMM_M4D(1.0f);
+  HMM_Mat4        view_to_clip_transform  = HMM_M4D(1.0f);
   struct {
     float              text_size     = 120.0f;
     Text_Batch_H_Align text_h_align  = TEXT_BATCH_H_ALIGN_CENTER;
@@ -190,10 +208,25 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         SDL_GetError());
     return SDL_APP_FAILURE;
   }
-  auto copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
-  if (!font_atlas_load(&as->font_atlas, as->base_path, "atlas_s64", as->device, copy_pass)) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font atlas");
-    return SDL_APP_FAILURE;
+  auto                         copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
+  static constexpr const char* font_atlas_kind_names[FONT_ATLAS_KIND_COUNT] = {
+      "roboto",
+      "science_gothic",
+      "playwrite",
+  };
+  for (int i = 0; i < FONT_ATLAS_KIND_COUNT; i++) {
+    if (!font_atlas_load(
+            &as->font_atlases[i],
+            as->base_path,
+            font_atlas_kind_names[i],
+            as->device,
+            copy_pass)) {
+      SDL_LogError(
+          SDL_LOG_CATEGORY_APPLICATION,
+          "Failed to load font atlas: %s",
+          font_atlas_kind_names[i]);
+      return SDL_APP_FAILURE;
+    }
   }
   SDL_EndGPUCopyPass(copy_pass);
   SDL_SubmitGPUCommandBuffer(cmd_buf);
@@ -247,7 +280,11 @@ static void draw_demo(App_State* as) {
   switch (as->demo_kind) {
   case DEMO_KIND_BASIC: {
     auto world_to_clip_transform = as->view_to_clip_transform * as->world_to_view_transform;
-    text_batch_begin(&as->text_batch, world_to_clip_transform, &as->font_atlas, as->font_kind);
+    text_batch_begin(
+        &as->text_batch,
+        world_to_clip_transform,
+        &as->font_atlases[as->font_atlas_kind],
+        as->font_variant);
     text_batch_draw(
         &as->text_batch,
         "Sample Text!",
@@ -279,13 +316,15 @@ static void draw_imgui(App_State* as) {
     }
 
     if (ImGui::CollapsingHeader("Demo Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+      const auto& font_atlas = as->font_atlases[as->font_atlas_kind];
+
       switch (as->demo_kind) {
       case DEMO_KIND_BASIC: {
         ImGui::SliderFloat(
             "Text Size",
             &as->demo_basic.text_size,
-            as->font_atlas.size,
-            as->font_atlas.size * 4.0f,
+            font_atlas.size,
+            font_atlas.size * 4.0f,
             "%.0f");
 
         static constexpr const char* text_h_align_strings[TEXT_BATCH_H_ALIGN_COUNT] = {
@@ -331,7 +370,7 @@ static void draw_imgui(App_State* as) {
         ImGui::LabelText(
             "Screen Pixel Range",
             "%f",
-            as->demo_basic.text_size / as->font_atlas.size * as->font_atlas.distance_range);
+            as->demo_basic.text_size / font_atlas.size * font_atlas.distance_range);
       } break;
       default:
         break;
@@ -339,27 +378,76 @@ static void draw_imgui(App_State* as) {
     }
 
     if (ImGui::CollapsingHeader("Font Atlas", ImGuiTreeNodeFlags_DefaultOpen)) {
-      static constexpr const char* font_kind_strings[FONT_KIND_COUNT] = {
-          "MoMo Signature Regular",
-          "Oswald Regular",
+      static constexpr const char* font_atlas_kind_strings[FONT_ATLAS_KIND_COUNT] = {
+          "Roboto",
+          "Science Gothic",
+          "Playwrite",
       };
-      if (ImGui::BeginCombo("Font Selection", font_kind_strings[as->font_kind])) {
-        for (int i = 0; i < FONT_KIND_COUNT; i++) {
-          bool is_selected = as->font_kind == i;
-          if (ImGui::Selectable(font_kind_strings[i], is_selected)) {
-            as->font_kind = static_cast<Font_Kind>(i);
+      if (ImGui::BeginCombo("Font Selection", font_atlas_kind_strings[as->font_atlas_kind])) {
+        for (int i = 0; i < FONT_ATLAS_KIND_COUNT; i++) {
+          bool is_selected = as->font_atlas_kind == i;
+          if (ImGui::Selectable(font_atlas_kind_strings[i], is_selected)) {
+            as->font_atlas_kind = static_cast<Font_Atlas_Kind>(i);
+            as->font_variant    = 0;
           }
           if (is_selected) { ImGui::SetItemDefaultFocus(); }
         }
         ImGui::EndCombo();
       }
 
-      ImGui::LabelText("Width", "%d", as->font_atlas.width);
-      ImGui::LabelText("Height", "%d", as->font_atlas.width);
+      const auto& font_atlas = as->font_atlases[as->font_atlas_kind];
+
+      static constexpr const char* font_roboto_variant_strings[FONT_ATLAS_ROBOTO_VARIANT_COUNT] = {
+          "Regular",
+          "Bold",
+          "Italic",
+          "Bold Italic",
+          "Light",
+      };
+      static constexpr const char*
+          font_science_gothic_variant_strings[FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_COUNT] = {
+              "Regular",
+              "Bold",
+              "Light",
+          };
+      switch (as->font_atlas_kind) {
+      case FONT_ATLAS_KIND_ROBOTO: {
+        if (ImGui::BeginCombo(
+                "Font Variant Selection",
+                font_roboto_variant_strings[as->font_variant])) {
+          for (int i = 0; i < FONT_ATLAS_ROBOTO_VARIANT_COUNT; i++) {
+            bool is_selected = as->font_variant == i;
+            if (ImGui::Selectable(font_roboto_variant_strings[i], is_selected)) {
+              as->font_variant = i;
+            }
+            if (is_selected) { ImGui::SetItemDefaultFocus(); }
+          }
+          ImGui::EndCombo();
+        }
+      } break;
+      case FONT_ATLAS_KIND_PLAYWRITE:
+        if (ImGui::BeginCombo(
+                "Font Variant Selection",
+                font_science_gothic_variant_strings[as->font_variant])) {
+          for (int i = 0; i < FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_COUNT; i++) {
+            bool is_selected = as->font_variant == i;
+            if (ImGui::Selectable(font_science_gothic_variant_strings[i], is_selected)) {
+              as->font_variant = i;
+            }
+            if (is_selected) { ImGui::SetItemDefaultFocus(); }
+          }
+          ImGui::EndCombo();
+        }
+      default:
+        break;
+      }
+
+      ImGui::LabelText("Width", "%d", font_atlas.width);
+      ImGui::LabelText("Height", "%d", font_atlas.width);
       if (ImGui::TreeNode("Texture")) {
         ImGui::Image(
-            static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(as->font_atlas.texture)),
-            ImVec2(as->font_atlas.width, as->font_atlas.height));
+            static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(font_atlas.texture)),
+            ImVec2(font_atlas.width, font_atlas.height));
         ImGui::TreePop();
       }
     }
@@ -432,7 +520,9 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result) {
   SDL_WaitForGPUIdle(as->device);
 
   text_batch_destroy(&as->text_batch, as->device);
-  font_atlas_destroy(&as->font_atlas, as->device);
+  for (int i = 0; i < FONT_ATLAS_KIND_COUNT; i++) {
+    font_atlas_destroy(&as->font_atlases[i], as->device);
+  }
 
   ImGui_ImplSDL3_Shutdown();
   ImGui_ImplSDLGPU3_Shutdown();
