@@ -68,11 +68,12 @@ struct Input {
 
 cbuffer Uniform_Block : register(b0, space3) {
   float font_size : packoffset(c0);
-  float pixel_range : packoffset(c0.y);
+  float2 unit_range : packoffset(c0.y);
 }
 
-float screen_pixel_range(float size) {
-  return size / font_size * pixel_range;
+float screen_pixel_range(float2 texcoord, float size) {
+  float2 screen_tex_size = 1.0f / fwidth(texcoord);
+  return max(0.5f * dot(unit_range, screen_tex_size), 1.0f);
 }
 
 float median(float r, float g, float b) {
@@ -82,7 +83,7 @@ float median(float r, float g, float b) {
 float4 main(Input input) : SV_Target0 {
   float3 msd = Texture.Sample(Sampler, input.texcoord).rgb;
   float sd = median(msd.r, msd.g, msd.b);
-  float screen_px_dist = screen_pixel_range(input.size) * (sd - 0.5);
+  float screen_px_dist = screen_pixel_range(input.texcoord, input.size) * (sd - 0.5);
   float opacity = clamp(screen_px_dist + 0.5, 0.0, 1.0);
 
   float4 color = input.color;

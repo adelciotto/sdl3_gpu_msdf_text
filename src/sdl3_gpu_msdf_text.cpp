@@ -14,7 +14,8 @@
 
 // -- Local Cpp Includes ------------------------------------------------------
 #include "common.cpp"
-#include "font_atlas.cpp"
 #include "imgui_font.cpp"
+#include "demo_strings.cpp"
+#include "font_atlas.cpp"
 #include "text_batch.cpp"
 #include "main.cpp"

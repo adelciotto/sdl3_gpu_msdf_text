@@ -1,7 +1,9 @@
-// raddbg 0.9.22 project file
+// raddbg 0.9.24 project file
 
-recent_file: path: "src/text_batch.cpp"
 recent_file: path: "src/main.cpp"
+recent_file: path: "extern/imgui/imgui.cpp"
+recent_file: path: "src/text_batch.cpp"
+recent_file: path: "extern/HandmadeMath/HandmadeMath.h"
 target:
 {
   executable: "sdl3_gpu_msdf_text.exe"
@@ -17,4 +19,9 @@ target:
   executable: "build/sdl3_gpu_msdf_text.exe"
   working_directory: build
   enabled: 1
+}
+debug_info:
+{
+  path: "C:/Users/magicbush/Code/anteater_software/sdl3_gpu_msdf_text/build/sdl3_gpu_msdf_text.pdb"
+  timestamp: 66199429009589
 }
