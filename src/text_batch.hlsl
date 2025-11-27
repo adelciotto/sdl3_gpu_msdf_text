@@ -29,9 +29,9 @@ Output main(uint id: SV_VertexID) {
   Instance_Data instance = Data_Buffer[first_instance + instance_index];
 
   float x0 = instance.position.x + instance.plane_bounds.x * instance.size;
-  float y0 = instance.position.y - instance.plane_bounds.y * instance.size;
+  float y0 = instance.position.y + instance.plane_bounds.y * instance.size;
   float x1 = instance.position.x + instance.plane_bounds.z * instance.size;
-  float y1 = instance.position.y - instance.plane_bounds.w * instance.size;
+  float y1 = instance.position.y + instance.plane_bounds.w * instance.size;
 
   float2 vertex_position[4] = {
     {x0, y0},

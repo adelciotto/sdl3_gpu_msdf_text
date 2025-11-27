@@ -29,7 +29,7 @@ set shadercross_fragment=%shadercross% -t fragment -DFRAGMENT_SHADER
 
 :: --- Font Atlas Build Definitions -------------------------------------------
 set msdf_atlas_gen=call ..\tools\msdf_atlas_gen\msdf_atlas_gen.exe
-set msdf_common=-type msdf -size 64 -pxrange 4 -yorigin top -coloringstrategy inktrap -errorcorrection auto-full 
+set msdf_common=-type msdf -size 72 -pxrange 4 -coloringstrategy distance -errorcorrection auto-full
 
 :: --- Prep Directories -------------------------------------------------------
 if not exist build mkdir build

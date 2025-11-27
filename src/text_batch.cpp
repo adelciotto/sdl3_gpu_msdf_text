@@ -265,24 +265,6 @@ static void text_batch_end(Text_Batch* text_batch) {
   text_batch->begin_called = false;
 }
 
-static int text_batch_string_instances_count(
-    const Font_Variant& font_data,
-    std::string_view    text,
-    float               size) {
-  int         count     = 0;
-  const char* ptr       = text.data();
-  auto        str_size  = text.size();
-  int         codepoint = SDL_INVALID_UNICODE_CODEPOINT;
-  while (codepoint != 0) {
-    codepoint = SDL_StepUTF8(&ptr, &str_size);
-    if (codepoint == SDL_INVALID_UNICODE_CODEPOINT || codepoint == 32 || codepoint == 10) {
-      continue;
-    }
-    count += 1;
-  }
-  return count;
-}
-
 static float
 text_batch_string_width(const Font_Variant& font_data, std::string_view text, float size) {
   float       width          = 0.0f;
@@ -330,6 +312,7 @@ static HMM_Vec2 text_batch_string_multiline_block_size(
       lines_count += 1;
     }
   }
+
   if (ptr > line_start) {
     std::string_view line(line_start, static_cast<size_t>(ptr - line_start));
     float            line_width = text_batch_string_width(font_data, line, size);
@@ -399,9 +382,9 @@ static void text_batch_draw_internal(
       float atlas_height     = static_cast<float>(draw_cmd->font_atlas->height);
       instance->atlas_bounds = HMM_V4(
           glyph_it->second.atlas_bounds.left / atlas_width,
-          glyph_it->second.atlas_bounds.top / atlas_height,
+          1.0f - glyph_it->second.atlas_bounds.top / atlas_height,
           glyph_it->second.atlas_bounds.right / atlas_width,
-          glyph_it->second.atlas_bounds.bottom / atlas_height);
+          1.0f - glyph_it->second.atlas_bounds.bottom / atlas_height);
     }
 
     current_position.X += glyph_it->second.horizontal_advance * size;
@@ -438,13 +421,13 @@ static void text_batch_draw(
   }
   switch (v_align) {
   case TEXT_BATCH_V_ALIGN_TOP:
-    current_position.Y += font_data.ascender * size;
+    current_position.Y -= font_data.ascender * size;
     break;
   case TEXT_BATCH_V_ALIGN_MIDDLE:
-    current_position.Y += (font_data.ascender + font_data.descender) * 0.5f * size;
+    current_position.Y -= (font_data.ascender + font_data.descender) * 0.5f * size;
     break;
   case TEXT_BATCH_V_ALIGN_BOTTOM:
-    current_position.Y += font_data.descender * size;
+    current_position.Y -= font_data.descender * size;
     break;
   case TEXT_BATCH_V_ALIGN_BASELINE:
   default:
@@ -499,13 +482,14 @@ static void text_batch_draw_multiline(
   float current_y = position.Y;
   switch (v_align) {
   case TEXT_BATCH_V_ALIGN_TOP:
-    current_y += font_data.ascender * size;
+    current_y -= font_data.ascender * size;
     break;
   case TEXT_BATCH_V_ALIGN_MIDDLE:
-    current_y = position.Y + block_size.Y * 0.5f + font_data.ascender * size;
+    current_y = position.Y + block_size.Y * 0.5f - font_data.ascender * size;
     break;
   case TEXT_BATCH_V_ALIGN_BOTTOM:
-    current_y += font_data.ascender * size - block_size.Y;
+    current_y =
+        position.Y + block_size.Y - font_data.line_height * size - font_data.descender * size;
     break;
   case TEXT_BATCH_V_ALIGN_BASELINE:
   default:
