@@ -4,4 +4,4 @@ This repository contains example code for efficiently drawing text using multich
 
 The texture atlases are generated at build time using Chlumsky's [msdf-atlas-gen](https://github.com/Chlumsky/msdf-atlas-gen).
 
-![preview](preview.mp4)
+https://anthonydelciotto.com/media/sdl3_gpu_msdf_text.mp4

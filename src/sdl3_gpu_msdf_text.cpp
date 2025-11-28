@@ -59,8 +59,8 @@ struct App_State {
   Text_Batch_H_Align text_h_align           = TEXT_BATCH_H_ALIGN_CENTER;
   Text_Batch_V_Align text_v_align           = TEXT_BATCH_V_ALIGN_BASELINE;
   HMM_Vec4           text_color             = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
-  HMM_Vec4           text_outline_color     = HMM_V4(0.998f, 0.9976f, 0.996f, 1.0f);
-  float              text_outline_width     = 0.0f;
+  HMM_Vec4           text_outline_color;
+  float              text_outline_thickness;
   struct {
     std::string text = "Example Text!";
   } demo_basic;
@@ -70,7 +70,7 @@ struct App_State {
   } demo_multiline;
   struct {
     float scroll_position;
-    float scroll_speed = 35.0f;
+    float scroll_speed;
     float fade_out_timer;
     float fade_out_duration;
   } demo_starwars;
@@ -157,6 +157,7 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
     break;
   case DEMO_KIND_STARWARS:
     as->demo_starwars.scroll_position = 250.0f;
+    as->demo_starwars.scroll_speed    = 60.0f;
     as->font_atlas_kind               = FONT_ATLAS_KIND_SCIENCE_GOTHIC;
     as->font_variant                  = FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_BOLD;
     as->bg_color                      = HMM_V4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -165,9 +166,11 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
         as->font_atlases[as->font_atlas_kind].variants[as->font_variant],
         demo_string_star_wars,
         as->text_size);
-    as->text_color   = HMM_V4(1.0f, 0.88f, 0.0f, 1.0f);
-    as->text_h_align = TEXT_BATCH_H_ALIGN_CENTER;
-    as->text_v_align = TEXT_BATCH_V_ALIGN_TOP;
+    as->text_color             = HMM_V4(0.014f, 0.985f, 0.998f, 1.0f);
+    as->text_outline_color     = HMM_V4(0.998f, 0.987f, 0.997f, 1.0f);
+    as->text_outline_thickness = 0.4f;
+    as->text_h_align           = TEXT_BATCH_H_ALIGN_CENTER;
+    as->text_v_align           = TEXT_BATCH_V_ALIGN_TOP;
     break;
   default:
     break;
@@ -209,8 +212,6 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     return SDL_APP_FAILURE;
   }
 
-  // Set the initial window size to be 50% of the primary displays desktop resolution.
-  // Defaults to 800x600 if theres any issues getting the display id or display mode.
   int   window_width       = 800;
   int   window_height      = 600;
   float content_scale      = 1.0f;
@@ -381,7 +382,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
 static void update_and_draw_demo(App_State* as, float dt) {
   switch (as->demo_kind) {
   case DEMO_KIND_BASIC: {
-    text_batch_begin(
+    text_batch_begin_basic(
         &as->text_batch,
         as->view_to_clip_transform,
         &as->font_atlases[as->font_atlas_kind],
@@ -393,9 +394,7 @@ static void update_and_draw_demo(App_State* as, float dt) {
         as->text_size,
         as->text_h_align,
         as->text_v_align,
-        as->text_color,
-        as->text_outline_color,
-        as->text_outline_width);
+        as->text_color);
     text_batch_end(&as->text_batch);
   } break;
   case DEMO_KIND_MULTILINE: {
@@ -406,7 +405,7 @@ static void update_and_draw_demo(App_State* as, float dt) {
     auto world_to_view_transform = translation * scale;
     auto world_to_clip_transform = as->view_to_clip_transform * world_to_view_transform;
 
-    text_batch_begin(
+    text_batch_begin_basic(
         &as->text_batch,
         world_to_clip_transform,
         &as->font_atlases[as->font_atlas_kind],
@@ -419,17 +418,15 @@ static void update_and_draw_demo(App_State* as, float dt) {
         as->text_h_align,
         as->text_v_align,
         as->text_color,
-        as->text_block_size,
-        as->text_outline_color,
-        as->text_outline_width);
+        as->text_block_size);
     text_batch_end(&as->text_batch);
   } break;
   case DEMO_KIND_STARWARS: {
-    auto text_color = as->text_color;
+    float alpha = as->text_color.A;
     if (as->demo_starwars.scroll_position > 2000.0f) {
       if (as->demo_starwars.fade_out_timer > 0.0f) {
         float progress = as->demo_starwars.fade_out_timer / as->demo_starwars.fade_out_duration;
-        text_color     = HMM_Lerp(as->text_color, 1.0f - progress, as->bg_color);
+        alpha          = HMM_Lerp(as->text_color.A, 1.0f - progress, 0.0f);
 
         as->demo_starwars.fade_out_timer -= dt;
         if (as->demo_starwars.fade_out_timer <= 0.0f) {
@@ -449,11 +446,13 @@ static void update_and_draw_demo(App_State* as, float dt) {
     auto world_to_view_transform = HMM_LookAt_RH(camera_position, camera_target, camera_up);
     auto world_to_clip_transform = as->view_to_clip_transform * world_to_view_transform;
 
-    text_batch_begin(
+    text_batch_begin_outline(
         &as->text_batch,
         world_to_clip_transform,
         &as->font_atlases[as->font_atlas_kind],
-        as->font_variant);
+        as->font_variant,
+        HMM_V4(as->text_outline_color.R, as->text_outline_color.G, as->text_outline_color.B, alpha),
+        as->text_outline_thickness);
     text_batch_draw_multiline(
         &as->text_batch,
         demo_string_star_wars,
@@ -461,10 +460,8 @@ static void update_and_draw_demo(App_State* as, float dt) {
         as->text_size,
         as->text_h_align,
         as->text_v_align,
-        text_color,
-        as->text_block_size,
-        as->text_outline_color,
-        as->text_outline_width);
+        HMM_V4(as->text_color.R, as->text_color.G, as->text_color.B, alpha),
+        as->text_block_size);
     text_batch_end(&as->text_batch);
   } break;
   default:
@@ -505,8 +502,6 @@ static void draw_imgui(App_State* as) {
       const auto& font_atlas = as->font_atlases[as->font_atlas_kind];
 
       ImGui::ColorEdit4("Text Color", &as->text_color.X);
-      ImGui::ColorEdit4("Text Outline Color", &as->text_outline_color.X);
-      ImGui::SliderFloat("Text Outline Width", &as->text_outline_width, 0.0f, 10.0f, "%.0f");
 
       switch (as->demo_kind) {
       case DEMO_KIND_BASIC: {
@@ -589,7 +584,16 @@ static void draw_imgui(App_State* as) {
         }
       } break;
       case DEMO_KIND_STARWARS: {
+        ImGui::ColorEdit4("Text Outline Color", &as->text_outline_color.X);
+        ImGui::SliderFloat(
+            "Text Outline Thickness",
+            &as->text_outline_thickness,
+            0.0f,
+            0.4f,
+            "%.1f");
+
         ImGui::SliderFloat("Scroll Speed", &as->demo_starwars.scroll_speed, 0.0f, 200.0f, "%.0f");
+
         if (ImGui::Button("Reset")) { on_demo_kind_selection(as, DEMO_KIND_STARWARS); }
       } break;
       default:

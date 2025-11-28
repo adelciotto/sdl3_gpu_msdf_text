@@ -55,7 +55,8 @@ if "%buildfonts%"=="1" (
                    -imageout limelight.png -json limelight.json || exit /b 1
 )
 %shadercross_vertex% ..\src\text_batch.hlsl -o text_batch.vert.dxil || exit /b 1
-%shadercross_fragment% ..\src\text_batch.hlsl -o text_batch.frag.dxil || exit /b 1
+%shadercross_fragment% ..\src\text_batch.hlsl -DEFFECT_BASIC -o text_batch_basic.frag.dxil || exit /b 1
+%shadercross_fragment% ..\src\text_batch.hlsl -DEFFECT_OUTLINE -o text_batch_outline.frag.dxil || exit /b 1
 %cl_compile% ..\src\sdl3_gpu_msdf_text.cpp ^
              ..\extern\imgui\imgui.cpp ^
              ..\extern\imgui\imgui_demo.cpp ^
