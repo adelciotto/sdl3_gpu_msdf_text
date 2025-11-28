@@ -50,9 +50,9 @@ if "%buildfonts%"=="1" (
                    -and -font ..\fonts\ScienceGothic-Light.ttf ^
                    %msdf_common% ^
                    -imageout science_gothic.png -json science_gothic.json || exit /b 1
-  %msdf_atlas_gen% -font ..\fonts\PlaywriteUSTradGuides-Regular.ttf ^
+  %msdf_atlas_gen% -font ..\fonts\Limelight-Regular.ttf ^
                    %msdf_common% ^
-                   -imageout playwrite.png -json playwrite.json || exit /b 1
+                   -imageout limelight.png -json limelight.json || exit /b 1
 )
 %shadercross_vertex% ..\src\text_batch.hlsl -o text_batch.vert.dxil || exit /b 1
 %shadercross_fragment% ..\src\text_batch.hlsl -o text_batch.frag.dxil || exit /b 1

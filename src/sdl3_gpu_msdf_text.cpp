@@ -22,38 +22,13 @@
 #include "text_batch.cpp"
 
 // TODOs:
-// - Add line width cache for text batch.
 // - Add example and support for effects. Outline, 3D bevel effect, blurred shadow.
-// - Replace playwrite with more simple cursive font.
 
 enum Demo_Kind {
   DEMO_KIND_BASIC,
   DEMO_KIND_MULTILINE,
   DEMO_KIND_STARWARS,
   DEMO_KIND_COUNT,
-};
-
-enum Font_Atlas_Kind {
-  FONT_ATLAS_KIND_ROBOTO,
-  FONT_ATLAS_KIND_SCIENCE_GOTHIC,
-  FONT_ATLAS_KIND_PLAYWRITE,
-  FONT_ATLAS_KIND_COUNT,
-};
-
-enum Font_Atlas_Roboto_Variant {
-  FONT_ATLAS_ROBOTO_VARIANT_REGULAR,
-  FONT_ATLAS_ROBOTO_VARIANT_BOLD,
-  FONT_ATLAS_ROBOTO_VARIANT_ITALIC,
-  FONT_ATLAS_ROBOTO_VARIANT_BOLD_ITALIC,
-  FONT_ATLAS_ROBOTO_VARIANT_LIGHT,
-  FONT_ATLAS_ROBOTO_VARIANT_COUNT,
-};
-
-enum Font_Atlas_Science_Gothic_Variant {
-  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_REGULAR,
-  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_BOLD,
-  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_LIGHT,
-  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_COUNT,
 };
 
 struct App_State {
@@ -77,16 +52,17 @@ struct App_State {
   Font_Atlas         font_atlases[FONT_ATLAS_KIND_COUNT];
   Text_Batch         text_batch;
   Demo_Kind          demo_kind;
+  HMM_Vec2           text_block_size;
   HMM_Vec4           bg_color               = HMM_V4(0.078f, 0.076f, 0.069f, 1.0f);
   HMM_Mat4           view_to_clip_transform = HMM_M4D(1.0f);
+  float              text_size              = 72.0f;
   Text_Batch_H_Align text_h_align           = TEXT_BATCH_H_ALIGN_CENTER;
   Text_Batch_V_Align text_v_align           = TEXT_BATCH_V_ALIGN_BASELINE;
   HMM_Vec4           text_color             = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
   HMM_Vec4           text_outline_color     = HMM_V4(0.998f, 0.9976f, 0.996f, 1.0f);
   float              text_outline_width     = 0.0f;
   struct {
-    std::string text      = "Example Text!";
-    float       text_size = 120.0f;
+    std::string text = "Example Text!";
   } demo_basic;
   struct {
     HMM_Vec2 camera_position;
@@ -94,7 +70,7 @@ struct App_State {
   } demo_multiline;
   struct {
     float scroll_position;
-    float scroll_speed = 20.0f;
+    float scroll_speed = 35.0f;
     float fade_out_timer;
     float fade_out_duration;
   } demo_starwars;
@@ -159,14 +135,20 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
     as->font_atlas_kind = FONT_ATLAS_KIND_ROBOTO;
     as->font_variant    = FONT_ATLAS_ROBOTO_VARIANT_BOLD_ITALIC;
     as->bg_color        = HMM_V4(0.97f, 0.95f, 0.86f, 1.0f);
+    as->text_size       = 120.0f;
     as->text_color      = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
     as->text_h_align    = TEXT_BATCH_H_ALIGN_CENTER;
     as->text_v_align    = TEXT_BATCH_V_ALIGN_BASELINE;
     break;
   case DEMO_KIND_MULTILINE:
-    as->font_atlas_kind                = FONT_ATLAS_KIND_ROBOTO;
-    as->font_variant                   = FONT_ATLAS_ROBOTO_VARIANT_LIGHT;
-    as->bg_color                       = HMM_V4(0.97f, 0.95f, 0.86f, 1.0f);
+    as->font_variant    = 0;
+    as->font_atlas_kind = FONT_ATLAS_KIND_LIMELIGHT;
+    as->bg_color        = HMM_V4(0.97f, 0.95f, 0.86f, 1.0f);
+    as->text_size       = 72.0f;
+    as->text_block_size = font_atlas_string_multiline_block_size(
+        as->font_atlases[as->font_atlas_kind].variants[as->font_variant],
+        demo_string_lorem_ipsum,
+        as->text_size);
     as->text_color                     = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
     as->demo_multiline.camera_position = as->window_size_pixels * 0.5f;
     as->demo_multiline.camera_zoom     = 1.0f;
@@ -178,9 +160,14 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
     as->font_atlas_kind               = FONT_ATLAS_KIND_SCIENCE_GOTHIC;
     as->font_variant                  = FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_BOLD;
     as->bg_color                      = HMM_V4(0.0f, 0.0f, 0.0f, 1.0f);
-    as->text_color                    = HMM_V4(1.0f, 0.88f, 0.0f, 1.0f);
-    as->text_h_align                  = TEXT_BATCH_H_ALIGN_CENTER;
-    as->text_v_align                  = TEXT_BATCH_V_ALIGN_TOP;
+    as->text_size                     = 48.0f;
+    as->text_block_size               = font_atlas_string_multiline_block_size(
+        as->font_atlases[as->font_atlas_kind].variants[as->font_variant],
+        demo_string_star_wars,
+        as->text_size);
+    as->text_color   = HMM_V4(1.0f, 0.88f, 0.0f, 1.0f);
+    as->text_h_align = TEXT_BATCH_H_ALIGN_CENTER;
+    as->text_v_align = TEXT_BATCH_V_ALIGN_TOP;
     break;
   default:
     break;
@@ -299,23 +286,15 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         SDL_GetError());
     return SDL_APP_FAILURE;
   }
-  auto                         copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
-  static constexpr const char* font_atlas_kind_names[FONT_ATLAS_KIND_COUNT] = {
-      "roboto",
-      "science_gothic",
-      "playwrite",
-  };
+  auto copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
   for (int i = 0; i < FONT_ATLAS_KIND_COUNT; i++) {
     if (!font_atlas_load(
             &as->font_atlases[i],
+            static_cast<Font_Atlas_Kind>(i),
             as->base_path,
-            font_atlas_kind_names[i],
             as->device,
             copy_pass)) {
-      SDL_LogError(
-          SDL_LOG_CATEGORY_APPLICATION,
-          "Failed to load font atlas: %s",
-          font_atlas_kind_names[i]);
+      SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font atlas");
       return SDL_APP_FAILURE;
     }
   }
@@ -411,7 +390,7 @@ static void update_and_draw_demo(App_State* as, float dt) {
         &as->text_batch,
         as->demo_basic.text,
         HMM_V3(as->window_size_pixels.X * 0.5f, as->window_size_pixels.Y * 0.5f, 0.0f),
-        as->demo_basic.text_size,
+        as->text_size,
         as->text_h_align,
         as->text_v_align,
         as->text_color,
@@ -436,10 +415,11 @@ static void update_and_draw_demo(App_State* as, float dt) {
         &as->text_batch,
         demo_string_lorem_ipsum,
         HMM_V3(0.0f, 0.0f, 0.0f),
-        72.0f,
+        as->text_size,
         as->text_h_align,
         as->text_v_align,
         as->text_color,
+        as->text_block_size,
         as->text_outline_color,
         as->text_outline_width);
     text_batch_end(&as->text_batch);
@@ -478,10 +458,11 @@ static void update_and_draw_demo(App_State* as, float dt) {
         &as->text_batch,
         demo_string_star_wars,
         HMM_V3(0.0f, as->demo_starwars.scroll_position, 0.0f),
-        48.0f,
+        as->text_size,
         as->text_h_align,
         as->text_v_align,
         text_color,
+        as->text_block_size,
         as->text_outline_color,
         as->text_outline_width);
     text_batch_end(&as->text_batch);
@@ -547,7 +528,7 @@ static void draw_imgui(App_State* as) {
 
         ImGui::SliderFloat(
             "Text Size",
-            &as->demo_basic.text_size,
+            &as->text_size,
             font_atlas.size * 0.5f,
             font_atlas.size * 4.0f,
             "%.0f");
@@ -588,7 +569,7 @@ static void draw_imgui(App_State* as) {
         ImGui::LabelText(
             "Screen Pixel Range",
             "%f",
-            as->demo_basic.text_size / font_atlas.size * font_atlas.distance_range);
+            as->text_size / font_atlas.size * font_atlas.distance_range);
       } break;
       case DEMO_KIND_MULTILINE: {
         static constexpr const char* text_h_align_strings[TEXT_BATCH_H_ALIGN_COUNT] = {
@@ -618,10 +599,11 @@ static void draw_imgui(App_State* as) {
     ImGui::Separator();
 
     if (ImGui::CollapsingHeader("Font Atlas", ImGuiTreeNodeFlags_DefaultOpen)) {
+      ImGui::BeginDisabled(as->demo_kind != DEMO_KIND_BASIC);
       static constexpr const char* font_atlas_kind_strings[FONT_ATLAS_KIND_COUNT] = {
           "Roboto",
           "Science Gothic",
-          "Playwrite",
+          "Limelight",
       };
       if (ImGui::BeginCombo("Font Selection", font_atlas_kind_strings[as->font_atlas_kind])) {
         for (int i = 0; i < FONT_ATLAS_KIND_COUNT; i++) {
@@ -681,6 +663,7 @@ static void draw_imgui(App_State* as) {
       default:
         break;
       }
+      ImGui::EndDisabled();
 
       ImGui::LabelText("Width", "%d", font_atlas.width);
       ImGui::LabelText("Height", "%d", font_atlas.width);

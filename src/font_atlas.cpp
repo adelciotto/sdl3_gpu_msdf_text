@@ -1,3 +1,26 @@
+enum Font_Atlas_Kind {
+  FONT_ATLAS_KIND_ROBOTO,
+  FONT_ATLAS_KIND_SCIENCE_GOTHIC,
+  FONT_ATLAS_KIND_LIMELIGHT,
+  FONT_ATLAS_KIND_COUNT,
+};
+
+enum Font_Atlas_Roboto_Variant {
+  FONT_ATLAS_ROBOTO_VARIANT_REGULAR,
+  FONT_ATLAS_ROBOTO_VARIANT_BOLD,
+  FONT_ATLAS_ROBOTO_VARIANT_ITALIC,
+  FONT_ATLAS_ROBOTO_VARIANT_BOLD_ITALIC,
+  FONT_ATLAS_ROBOTO_VARIANT_LIGHT,
+  FONT_ATLAS_ROBOTO_VARIANT_COUNT,
+};
+
+enum Font_Atlas_Science_Gothic_Variant {
+  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_REGULAR,
+  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_BOLD,
+  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_LIGHT,
+  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_COUNT,
+};
+
 struct Font_Glyph_Bounds {
   float left;
   float bottom;
@@ -97,14 +120,20 @@ void from_json(const nlohmann::json& j, Font_Atlas& font_atlas) {
 
 static bool font_atlas_load(
     Font_Atlas*        font_atlas,
+    Font_Atlas_Kind    kind,
     const std::string& base_path,
-    const char*        atlas_name,
     SDL_GPUDevice*     device,
     SDL_GPUCopyPass*   copy_pass) {
   SDL_assert(font_atlas != nullptr);
-  SDL_assert(atlas_name != nullptr);
   SDL_assert(device != nullptr);
   SDL_assert(copy_pass != nullptr);
+
+  static constexpr const char* font_atlas_kind_names[FONT_ATLAS_KIND_COUNT] = {
+      "roboto",
+      "science_gothic",
+      "limelight",
+  };
+  auto atlas_name = font_atlas_kind_names[kind];
 
   auto        json_file_path = base_path + "/" + atlas_name + ".json";
   std::string json_file_contents;
@@ -192,4 +221,61 @@ static void font_atlas_destroy(Font_Atlas* font_atlas, SDL_GPUDevice* device) {
   SDL_assert(device != nullptr);
 
   SDL_ReleaseGPUTexture(device, font_atlas->texture);
+}
+
+static float
+font_atlas_string_width(const Font_Variant& font_data, std::string_view text, float size) {
+  float       width          = 0.0f;
+  const char* ptr            = text.data();
+  auto        str_size       = text.size();
+  int         codepoint      = SDL_INVALID_UNICODE_CODEPOINT;
+  int         prev_codepoint = 0;
+  while (codepoint != 0) {
+    codepoint = SDL_StepUTF8(&ptr, &str_size);
+    if (codepoint == SDL_INVALID_UNICODE_CODEPOINT) { continue; }
+
+    auto glyph_it = font_data.glyphs.find(codepoint);
+    if (glyph_it == font_data.glyphs.end()) { continue; }
+
+    if (prev_codepoint != 0) {
+      auto kerning_it = font_data.kernings.find(std::make_pair(prev_codepoint, codepoint));
+      if (kerning_it != font_data.kernings.end()) { width += kerning_it->second * size; }
+    }
+    prev_codepoint = codepoint;
+
+    width += glyph_it->second.horizontal_advance * size;
+  }
+  return width;
+}
+
+static HMM_Vec2 font_atlas_string_multiline_block_size(
+    const Font_Variant& font_data,
+    std::string_view    text,
+    float               size) {
+  int         lines_count    = 1;
+  float       max_line_width = 0.0f;
+  const char* ptr            = text.data();
+  auto        str_size       = text.size();
+  const char* line_start     = ptr;
+  int         codepoint      = SDL_INVALID_UNICODE_CODEPOINT;
+  while (codepoint != 0) {
+    codepoint = SDL_StepUTF8(&ptr, &str_size);
+    if (codepoint == SDL_INVALID_UNICODE_CODEPOINT) { continue; }
+
+    if (codepoint == 10) {
+      std::string_view line(line_start, static_cast<size_t>(ptr - line_start - 1));
+      float            line_width = font_atlas_string_width(font_data, line, size);
+      max_line_width              = std::max(max_line_width, line_width);
+      line_start                  = ptr;
+      lines_count += 1;
+    }
+  }
+
+  if (ptr > line_start) {
+    std::string_view line(line_start, static_cast<size_t>(ptr - line_start));
+    float            line_width = font_atlas_string_width(font_data, line, size);
+    max_line_width              = std::max(max_line_width, line_width);
+  }
+
+  return HMM_V2(max_line_width, lines_count * font_data.line_height * size);
 }
