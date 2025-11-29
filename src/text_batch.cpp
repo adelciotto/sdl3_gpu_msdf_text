@@ -327,7 +327,7 @@ static void text_batch_begin_outline(
     const Font_Atlas* font_atlas,
     int               font_variant,
     HMM_Vec4          outline_color     = HMM_V4(0.0f, 0.0f, 0.0f, 1.0f),
-    float             outline_thickness = 4.0f) {
+    float             outline_thickness = 0.4f) {
   SDL_assert(text_batch != nullptr);
   SDL_assert(font_atlas != nullptr);
   SDL_assert(font_variant >= 0 && font_variant < font_atlas->variants.size());
@@ -485,7 +485,6 @@ static void text_batch_draw_multiline(
     text_block_size = font_atlas_string_multiline_block_size(font_data, text, size);
   }
 
-  // Calculate starting Y based on block-level V alignment.
   float current_y = position.Y;
   switch (v_align) {
   case TEXT_BATCH_V_ALIGN_TOP:
@@ -524,7 +523,6 @@ static void text_batch_draw_multiline(
     current_y -= font_data.line_height * size;
   };
 
-  // Split text into lines and draw each one.
   const char* ptr        = text.data();
   auto        str_size   = text.size();
   const char* line_start = ptr;
@@ -539,7 +537,6 @@ static void text_batch_draw_multiline(
     }
   }
 
-  // Draw the last line if there's any remaining text.
   if (ptr > line_start) { draw_line({line_start, static_cast<size_t>(ptr - line_start)}); }
 }
 
@@ -554,17 +551,23 @@ static void text_batch_prepare_draw_cmds(
 
   if (text_batch->draw_cmds_count == 0) { return; }
 
-  Text_Batch_Instance* mapped_ptr = static_cast<Text_Batch_Instance*>(
-      SDL_MapGPUTransferBuffer(device, text_batch->transfer_buffer, true));
-  if (mapped_ptr == nullptr) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to map transfer buffer: %s", SDL_GetError());
-    return;
+  {
+    Text_Batch_Instance* mapped_ptr = static_cast<Text_Batch_Instance*>(
+        SDL_MapGPUTransferBuffer(device, text_batch->transfer_buffer, true));
+    if (mapped_ptr == nullptr) {
+      SDL_LogError(
+          SDL_LOG_CATEGORY_APPLICATION,
+          "Failed to map transfer buffer: %s",
+          SDL_GetError());
+      return;
+    }
+    defer(SDL_UnmapGPUTransferBuffer(device, text_batch->transfer_buffer));
+
+    SDL_memcpy(
+        mapped_ptr,
+        text_batch->instances,
+        sizeof(Text_Batch_Instance) * text_batch->total_instances_count);
   }
-  SDL_memcpy(
-      mapped_ptr,
-      text_batch->instances,
-      sizeof(Text_Batch_Instance) * text_batch->total_instances_count);
-  SDL_UnmapGPUTransferBuffer(device, text_batch->transfer_buffer);
 
   {
     auto copy_pass = SDL_BeginGPUCopyPass(cmd_buf);

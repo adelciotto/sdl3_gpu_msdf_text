@@ -22,7 +22,7 @@
 #include "text_batch.cpp"
 
 // TODOs:
-// - Add example and support for effects. Outline, 3D bevel effect, blurred shadow.
+// - MSDFA atlases and a blur effect example.
 
 enum Demo_Kind {
   DEMO_KIND_BASIC,
@@ -43,7 +43,8 @@ struct App_State {
   uint64_t             count_per_second;
   uint64_t             last_counter;
   uint64_t             max_counter_delta;
-  bool                 vsync = true;
+  bool                 vsync      = true;
+  bool                 fullscreen = false;
 
   ImFont* imgui_font;
 
@@ -358,20 +359,16 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
     if (as->demo_kind == DEMO_KIND_MULTILINE && !io.WantCaptureMouse) {
       HMM_Vec2 mouse_pos =
           HMM_V2(event->wheel.mouse_x, as->window_size_pixels.Y - event->wheel.mouse_y);
-      HMM_Vec2 mouse_world_before =
+      HMM_Vec2 last_mouse_world =
           (mouse_pos - as->demo_multiline.camera_position) / as->demo_multiline.camera_zoom;
 
-      // Apply zoom.
       as->demo_multiline.camera_zoom += event->wheel.y * 0.1f * as->demo_multiline.camera_zoom;
       as->demo_multiline.camera_zoom = HMM_Clamp(0.25f, as->demo_multiline.camera_zoom, 15.0f);
 
-      // Convert the same world point back to screen space with new zoom.
-      HMM_Vec2 mouse_world_after =
+      HMM_Vec2 mouse_world =
           (mouse_pos - as->demo_multiline.camera_position) / as->demo_multiline.camera_zoom;
-
-      // Adjust camera position to keep the world point under the cursor.
       as->demo_multiline.camera_position +=
-          (mouse_world_after - mouse_world_before) * as->demo_multiline.camera_zoom;
+          (mouse_world - last_mouse_world) * as->demo_multiline.camera_zoom;
     }
   } break;
   }
@@ -489,6 +486,10 @@ static void draw_imgui(App_State* as) {
 
     bool vsync = as->vsync;
     if (ImGui::Checkbox("VSync", &vsync)) { on_vsync_changed(as, vsync); }
+    if (ImGui::Button("Toggle Fullscreen")) {
+      as->fullscreen = !as->fullscreen;
+      SDL_SetWindowFullscreen(as->window, as->fullscreen);
+    }
 
     ImGui::Separator();
 
@@ -723,9 +724,11 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
   if (swapchain_texture != nullptr && !as->window_minimized) {
     update_and_draw_demo(as, static_cast<float>(delta_time));
+
     ImDrawData* draw_data = ImGui::GetDrawData();
 
     text_batch_prepare_draw_cmds(&as->text_batch, as->device, cmd_buf);
+
     ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, cmd_buf);
 
     {
