@@ -86,6 +86,13 @@ This `sdl3_gpu_msdf_text.exe` has been built in release mode. If you'd like to m
 
 TODO
 
+## TODO
+
+- [ ] Add Text_Static abstraction and example for drawing lots of static pre-uploaded text (millions of glyphs).
+- [ ] Add blur effect and use mtsdf atlases.
+- [ ] Upload pre-built windows exe to releases.
+- [ ] Build scripts and testing on Linux.
+
 ## References
 
 * https://github.com/Chlumsky/msdfgen
