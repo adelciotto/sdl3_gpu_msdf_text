@@ -4,6 +4,12 @@ This repository contains example code for efficiently drawing text using multich
 
 The texture atlases are generated at build time using Chlumsky's [msdf-atlas-gen](https://github.com/Chlumsky/msdf-atlas-gen).
 
+<p>
+  <img src="screenshots/demo_basic.png" width="30%">
+  <img src="screenshots/demo_multiline.png" width="30%">
+  <img src="screenshots/demo_star_wars.png" width="30%">
+</p>
+
 [Demo Video](https://anthonydelciotto.com/media/sdl3_gpu_msdf_text.mp4)
 
 ## Build
@@ -23,7 +29,7 @@ cl
 If everything is set up correctly, you should have output very similar to the following:
 
 ```
-Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30151 for x64
+Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35216 for x64
 Copyright (C) Microsoft Corporation.  All rights reserved.
 
 usage: cl [ option... ] filename... [ /link linkoption... ]
