@@ -410,7 +410,25 @@ static void update_and_draw_demo(App_State* as, float dt) {
     text_batch_draw_multiline(
         &as->text_batch,
         demo_string_lorem_ipsum,
+        HMM_V3(-as->text_block_size.X - 48.0f, 0.0f, 0.0f),
+        as->text_size,
+        as->text_h_align,
+        as->text_v_align,
+        as->text_color,
+        as->text_block_size);
+    text_batch_draw_multiline(
+        &as->text_batch,
+        demo_string_lorem_ipsum,
         HMM_V3(0.0f, 0.0f, 0.0f),
+        as->text_size,
+        as->text_h_align,
+        as->text_v_align,
+        as->text_color,
+        as->text_block_size);
+    text_batch_draw_multiline(
+        &as->text_batch,
+        demo_string_lorem_ipsum,
+        HMM_V3(as->text_block_size.X + 48.0f, 0.0f, 0.0f),
         as->text_size,
         as->text_h_align,
         as->text_v_align,

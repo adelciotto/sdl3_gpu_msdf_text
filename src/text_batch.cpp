@@ -378,7 +378,7 @@ static void text_batch_draw_internal(
     if (glyph_it == font_data.glyphs.end()) { continue; }
 
     if (prev_codepoint != 0) {
-      auto kerning_it = font_data.kernings.find(std::make_pair(prev_codepoint, codepoint));
+      auto kerning_it = font_data.kernings.find(font_atlas_pack_kerning(prev_codepoint, codepoint));
       if (kerning_it != font_data.kernings.end()) {
         current_position.X += kerning_it->second * size;
       }

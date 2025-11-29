@@ -41,20 +41,12 @@ struct Font_Kerning {
   float advance;
 };
 
-struct Pair_Int_Hash {
-  size_t operator()(const std::pair<int, int>& p) const {
-    size_t h1 = std::hash<int> {}(p.first);
-    size_t h2 = std::hash<int> {}(p.second);
-    return h1 ^ (h2 << 1);
-  }
-};
-
 struct Font_Variant {
-  std::unordered_map<int, Font_Glyph>                           glyphs;
-  std::unordered_map<std::pair<int, int>, float, Pair_Int_Hash> kernings;
-  float                                                         line_height;
-  float                                                         ascender;
-  float                                                         descender;
+  std::unordered_map<int, Font_Glyph> glyphs;
+  std::unordered_map<uint64_t, float> kernings;
+  float                               line_height;
+  float                               ascender;
+  float                               descender;
 };
 
 struct Font_Atlas {
@@ -65,6 +57,11 @@ struct Font_Atlas {
   int                       height;
   SDL_GPUTexture*           texture;
 };
+
+static uint64_t font_atlas_pack_kerning(int unicode1, int unicode2) {
+  return static_cast<uint64_t>(static_cast<uint32_t>(unicode1)) << 32 |
+         static_cast<uint32_t>(unicode2);
+}
 
 void from_json(const nlohmann::json& j, Font_Glyph_Bounds& bounds) {
   j.at("left").get_to(bounds.left);
@@ -99,7 +96,7 @@ void from_json(const nlohmann::json& j, Font_Variant& variant) {
   std::vector<Font_Kerning> kernings;
   j.at("kerning").get_to(kernings);
   for (const auto& kerning : kernings) {
-    variant.kernings[std::make_pair(kerning.unicode1, kerning.unicode2)] = kerning.advance;
+    variant.kernings[font_atlas_pack_kerning(kerning.unicode1, kerning.unicode2)] = kerning.advance;
   }
 }
 
@@ -238,7 +235,7 @@ font_atlas_string_width(const Font_Variant& font_data, std::string_view text, fl
     if (glyph_it == font_data.glyphs.end()) { continue; }
 
     if (prev_codepoint != 0) {
-      auto kerning_it = font_data.kernings.find(std::make_pair(prev_codepoint, codepoint));
+      auto kerning_it = font_data.kernings.find(font_atlas_pack_kerning(prev_codepoint, codepoint));
       if (kerning_it != font_data.kernings.end()) { width += kerning_it->second * size; }
     }
     prev_codepoint = codepoint;

@@ -89,8 +89,8 @@ float4 main(Input input) : SV_Target0 {
 #if defined(EFFECT_BASIC)
   float3 msd            = Texture.Sample(Sampler, input.texcoord).rgb;
   float  sd             = median(msd.r, msd.g, msd.b);
-  float  screen_px_dist = screen_pixel_range(input.texcoord, input.size) * (sd - 0.5);
-  float  opacity        = clamp(screen_px_dist + 0.5, 0.0, 1.0);
+  float  screen_px_dist = screen_pixel_range(input.texcoord, input.size) * (sd - 0.5f);
+  float  opacity        = clamp(screen_px_dist + 0.5f, 0.0f, 1.0f);
 
   float4 color = input.color;
   color.a *= opacity;
