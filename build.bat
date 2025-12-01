@@ -29,7 +29,7 @@ set shadercross_fragment=%shadercross% -t fragment -DFRAGMENT_SHADER
 
 :: --- Font Atlas Build Definitions -------------------------------------------
 set msdf_atlas_gen=call ..\tools\msdf_atlas_gen\msdf_atlas_gen.exe
-set msdf_common=-type msdf -size 72 -pxrange 4 -coloringstrategy distance -errorcorrection auto-full
+set msdf_common=-type msdf -size 128 -pxrange 8 -coloringstrategy inktrap -errorcorrection auto-full
 
 :: --- Prep Directories -------------------------------------------------------
 if not exist build mkdir build
@@ -55,8 +55,7 @@ if "%buildfonts%"=="1" (
                    -imageout limelight.png -json limelight.json || exit /b 1
 )
 %shadercross_vertex% ..\src\text_batch.hlsl -o text_batch.vert.dxil || exit /b 1
-%shadercross_fragment% ..\src\text_batch.hlsl -DEFFECT_BASIC -o text_batch_basic.frag.dxil || exit /b 1
-%shadercross_fragment% ..\src\text_batch.hlsl -DEFFECT_OUTLINE -o text_batch_outline.frag.dxil || exit /b 1
+%shadercross_fragment% ..\src\text_batch.hlsl -o text_batch.frag.dxil || exit /b 1
 %cl_compile% ..\src\sdl3_gpu_msdf_text.cpp ^
              ..\extern\imgui\imgui.cpp ^
              ..\extern\imgui\imgui_demo.cpp ^

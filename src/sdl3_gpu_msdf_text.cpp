@@ -20,6 +20,7 @@
 #include "demo_strings.cpp"
 #include "font_atlas.cpp"
 #include "text_batch.cpp"
+#include "text_static.cpp"
 
 // TODOs:
 // - Text Static.
@@ -50,20 +51,17 @@ struct App_State {
 
   ImFont* imgui_font;
 
-  Font_Atlas_Kind    font_atlas_kind;
-  int                font_variant;
-  Font_Atlas         font_atlases[FONT_ATLAS_KIND_COUNT];
-  Text_Batch         text_batch;
-  Demo_Kind          demo_kind;
-  HMM_Vec2           text_block_size;
-  HMM_Vec4           bg_color               = HMM_V4(0.078f, 0.076f, 0.069f, 1.0f);
-  HMM_Mat4           view_to_clip_transform = HMM_M4D(1.0f);
-  float              text_size              = 72.0f;
-  Text_Batch_H_Align text_h_align           = TEXT_BATCH_H_ALIGN_CENTER;
-  Text_Batch_V_Align text_v_align           = TEXT_BATCH_V_ALIGN_BASELINE;
-  HMM_Vec4           text_color             = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
-  HMM_Vec4           text_outline_color;
-  float              text_outline_thickness;
+  Font_Atlas_Kind font_atlas_kind;
+  int             font_variant;
+  Font_Atlas      font_atlases[FONT_ATLAS_KIND_COUNT];
+  Text_Batch      text_batch;
+  Demo_Kind       demo_kind;
+  HMM_Vec2        text_block_size;
+  HMM_Vec4        bg_color               = HMM_V4(0.078f, 0.076f, 0.069f, 1.0f);
+  HMM_Mat4        view_to_clip_transform = HMM_M4D(1.0f);
+  float           text_size              = 72.0f;
+  Text_Align      text_align;
+  Text_Style      text_style;
   struct {
     std::string text = "Example Text!";
   } demo_basic;
@@ -135,13 +133,13 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
 
   switch (as->demo_kind) {
   case DEMO_KIND_TEXT_BATCH_SINGLELINE:
-    as->font_atlas_kind = FONT_ATLAS_KIND_ROBOTO;
-    as->font_variant    = FONT_ATLAS_ROBOTO_VARIANT_BOLD_ITALIC;
-    as->bg_color        = HMM_V4(0.97f, 0.95f, 0.86f, 1.0f);
-    as->text_size       = 120.0f;
-    as->text_color      = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
-    as->text_h_align    = TEXT_BATCH_H_ALIGN_CENTER;
-    as->text_v_align    = TEXT_BATCH_V_ALIGN_BASELINE;
+    as->font_atlas_kind       = FONT_ATLAS_KIND_ROBOTO;
+    as->font_variant          = FONT_ATLAS_ROBOTO_VARIANT_BOLD_ITALIC;
+    as->bg_color              = HMM_V4(0.97f, 0.95f, 0.86f, 1.0f);
+    as->text_size             = 120.0f;
+    as->text_align.horizontal = TEXT_H_ALIGN_CENTER;
+    as->text_align.vertical   = TEXT_V_ALIGN_BASELINE;
+    as->text_style.color      = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
     break;
   case DEMO_KIND_TEXT_BATCH_MULTILINE:
     as->font_variant    = 0;
@@ -152,11 +150,11 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
         as->font_atlases[as->font_atlas_kind].variants[as->font_variant],
         demo_string_lorem_ipsum,
         as->text_size);
-    as->text_color                     = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
+    as->text_align.horizontal          = TEXT_H_ALIGN_LEFT;
+    as->text_align.vertical            = TEXT_V_ALIGN_MIDDLE;
+    as->text_style.color               = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
     as->demo_multiline.camera_position = as->window_size_pixels * 0.5f;
     as->demo_multiline.camera_zoom     = 1.0f;
-    as->text_h_align                   = TEXT_BATCH_H_ALIGN_LEFT;
-    as->text_v_align                   = TEXT_BATCH_V_ALIGN_MIDDLE;
     break;
   case DEMO_KIND_TEXT_BATCH_STARWARS:
     as->demo_starwars.scroll_position = 250.0f;
@@ -169,11 +167,11 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
         as->font_atlases[as->font_atlas_kind].variants[as->font_variant],
         demo_string_star_wars,
         as->text_size);
-    as->text_color             = HMM_V4(0.014f, 0.985f, 0.998f, 1.0f);
-    as->text_outline_color     = HMM_V4(0.998f, 0.987f, 0.997f, 1.0f);
-    as->text_outline_thickness = 0.4f;
-    as->text_h_align           = TEXT_BATCH_H_ALIGN_CENTER;
-    as->text_v_align           = TEXT_BATCH_V_ALIGN_TOP;
+    as->text_align.horizontal        = TEXT_H_ALIGN_CENTER;
+    as->text_align.vertical          = TEXT_V_ALIGN_TOP;
+    as->text_style.color             = HMM_V4(0.014f, 0.985f, 0.998f, 1.0f);
+    as->text_style.outline_color     = HMM_V4(0.998f, 0.987f, 0.997f, 1.0f);
+    as->text_style.outline_thickness = 0.4f;
     break;
   default:
     break;
@@ -381,7 +379,7 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
 static void update_and_draw_demo(App_State* as, float dt) {
   switch (as->demo_kind) {
   case DEMO_KIND_TEXT_BATCH_SINGLELINE: {
-    text_batch_begin_basic(
+    text_batch_begin(
         &as->text_batch,
         as->view_to_clip_transform,
         &as->font_atlases[as->font_atlas_kind],
@@ -391,9 +389,8 @@ static void update_and_draw_demo(App_State* as, float dt) {
         as->demo_basic.text,
         HMM_V3(as->window_size_pixels.X * 0.5f, as->window_size_pixels.Y * 0.5f, 0.0f),
         as->text_size,
-        as->text_h_align,
-        as->text_v_align,
-        as->text_color);
+        as->text_align,
+        as->text_style);
     text_batch_end(&as->text_batch);
   } break;
   case DEMO_KIND_TEXT_BATCH_MULTILINE: {
@@ -404,7 +401,7 @@ static void update_and_draw_demo(App_State* as, float dt) {
     auto world_to_view_transform = translation * scale;
     auto world_to_clip_transform = as->view_to_clip_transform * world_to_view_transform;
 
-    text_batch_begin_basic(
+    text_batch_begin(
         &as->text_batch,
         world_to_clip_transform,
         &as->font_atlases[as->font_atlas_kind],
@@ -414,36 +411,33 @@ static void update_and_draw_demo(App_State* as, float dt) {
         demo_string_lorem_ipsum,
         HMM_V3(-as->text_block_size.X - 48.0f, 0.0f, 0.0f),
         as->text_size,
-        as->text_h_align,
-        as->text_v_align,
-        as->text_color,
+        as->text_align,
+        as->text_style,
         as->text_block_size);
     text_batch_draw_multiline(
         &as->text_batch,
         demo_string_lorem_ipsum,
         HMM_V3(0.0f, 0.0f, 0.0f),
         as->text_size,
-        as->text_h_align,
-        as->text_v_align,
-        as->text_color,
+        as->text_align,
+        as->text_style,
         as->text_block_size);
     text_batch_draw_multiline(
         &as->text_batch,
         demo_string_lorem_ipsum,
         HMM_V3(as->text_block_size.X + 48.0f, 0.0f, 0.0f),
         as->text_size,
-        as->text_h_align,
-        as->text_v_align,
-        as->text_color,
+        as->text_align,
+        as->text_style,
         as->text_block_size);
     text_batch_end(&as->text_batch);
   } break;
   case DEMO_KIND_TEXT_BATCH_STARWARS: {
-    float alpha = as->text_color.A;
+    float alpha = as->text_style.color.A;
     if (as->demo_starwars.scroll_position > 2000.0f) {
       if (as->demo_starwars.fade_out_timer > 0.0f) {
         float progress = as->demo_starwars.fade_out_timer / as->demo_starwars.fade_out_duration;
-        alpha          = HMM_Lerp(as->text_color.A, 1.0f - progress, 0.0f);
+        alpha          = HMM_Lerp(as->text_style.color.A, 1.0f - progress, 0.0f);
 
         as->demo_starwars.fade_out_timer -= dt;
         if (as->demo_starwars.fade_out_timer <= 0.0f) {
@@ -463,21 +457,27 @@ static void update_and_draw_demo(App_State* as, float dt) {
     auto world_to_view_transform = HMM_LookAt_RH(camera_position, camera_target, camera_up);
     auto world_to_clip_transform = as->view_to_clip_transform * world_to_view_transform;
 
-    text_batch_begin_outline(
+    auto style = as->text_style;
+    style.color =
+        HMM_V4(as->text_style.color.R, as->text_style.color.G, as->text_style.color.B, alpha);
+    style.outline_color = HMM_V4(
+        as->text_style.outline_color.R,
+        as->text_style.outline_color.G,
+        as->text_style.outline_color.B,
+        alpha);
+
+    text_batch_begin(
         &as->text_batch,
         world_to_clip_transform,
         &as->font_atlases[as->font_atlas_kind],
-        as->font_variant,
-        HMM_V4(as->text_outline_color.R, as->text_outline_color.G, as->text_outline_color.B, alpha),
-        as->text_outline_thickness);
+        as->font_variant);
     text_batch_draw_multiline(
         &as->text_batch,
         demo_string_star_wars,
         HMM_V3(0.0f, as->demo_starwars.scroll_position, 0.0f),
         as->text_size,
-        as->text_h_align,
-        as->text_v_align,
-        HMM_V4(as->text_color.R, as->text_color.G, as->text_color.B, alpha),
+        as->text_align,
+        style,
         as->text_block_size);
     text_batch_end(&as->text_batch);
   } break;
@@ -522,7 +522,49 @@ static void draw_imgui(App_State* as) {
     if (ImGui::CollapsingHeader("Demo Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
       const auto& font_atlas = as->font_atlases[as->font_atlas_kind];
 
-      ImGui::ColorEdit4("Text Color", &as->text_color.X);
+      ImGui::ColorEdit4("Text Color", &as->text_style.color.X);
+      ImGui::ColorEdit4("Text Outline Color", &as->text_style.outline_color.X);
+      ImGui::SliderFloat(
+          "Text Outline Thickness",
+          &as->text_style.outline_thickness,
+          0.0f,
+          0.4f,
+          "%.1f");
+
+      static constexpr const char* text_h_align_strings[TEXT_H_ALIGN_COUNT] = {
+          "Left",
+          "Center",
+          "Right",
+      };
+      if (ImGui::BeginCombo(
+              "Text Horizontal Align",
+              text_h_align_strings[as->text_align.horizontal])) {
+        for (int i = 0; i < TEXT_H_ALIGN_COUNT; i++) {
+          bool is_selected = as->text_align.horizontal == i;
+          if (ImGui::Selectable(text_h_align_strings[i], is_selected)) {
+            as->text_align.horizontal = static_cast<Text_H_Align>(i);
+          }
+          if (is_selected) { ImGui::SetItemDefaultFocus(); }
+        }
+        ImGui::EndCombo();
+      }
+
+      static constexpr const char* text_v_align_strings[TEXT_V_ALIGN_COUNT] = {
+          "Top",
+          "Middle",
+          "Baseline",
+          "Bottom",
+      };
+      if (ImGui::BeginCombo("Text Vertical Align", text_v_align_strings[as->text_align.vertical])) {
+        for (int i = 0; i < TEXT_V_ALIGN_COUNT; i++) {
+          bool is_selected = as->text_align.vertical == i;
+          if (ImGui::Selectable(text_v_align_strings[i], is_selected)) {
+            as->text_align.vertical = static_cast<Text_V_Align>(i);
+          }
+          if (is_selected) { ImGui::SetItemDefaultFocus(); }
+        }
+        ImGui::EndCombo();
+      }
 
       switch (as->demo_kind) {
       case DEMO_KIND_TEXT_BATCH_SINGLELINE: {
@@ -549,70 +591,12 @@ static void draw_imgui(App_State* as) {
             font_atlas.size * 4.0f,
             "%.0f");
 
-        static constexpr const char* text_h_align_strings[TEXT_BATCH_H_ALIGN_COUNT] = {
-            "Left",
-            "Center",
-            "Right",
-        };
-        if (ImGui::BeginCombo("Text Horizontal Align", text_h_align_strings[as->text_h_align])) {
-          for (int i = 0; i < TEXT_BATCH_H_ALIGN_COUNT; i++) {
-            bool is_selected = as->text_h_align == i;
-            if (ImGui::Selectable(text_h_align_strings[i], is_selected)) {
-              as->text_h_align = static_cast<Text_Batch_H_Align>(i);
-            }
-            if (is_selected) { ImGui::SetItemDefaultFocus(); }
-          }
-          ImGui::EndCombo();
-        }
-
-        static constexpr const char* text_v_align_strings[TEXT_BATCH_V_ALIGN_COUNT] = {
-            "Top",
-            "Middle",
-            "Baseline",
-            "Bottom",
-        };
-        if (ImGui::BeginCombo("Text Vertical Align", text_v_align_strings[as->text_v_align])) {
-          for (int i = 0; i < TEXT_BATCH_V_ALIGN_COUNT; i++) {
-            bool is_selected = as->text_v_align == i;
-            if (ImGui::Selectable(text_v_align_strings[i], is_selected)) {
-              as->text_v_align = static_cast<Text_Batch_V_Align>(i);
-            }
-            if (is_selected) { ImGui::SetItemDefaultFocus(); }
-          }
-          ImGui::EndCombo();
-        }
-
         ImGui::LabelText(
             "Screen Pixel Range",
             "%f",
             as->text_size / font_atlas.size * font_atlas.distance_range);
       } break;
-      case DEMO_KIND_TEXT_BATCH_MULTILINE: {
-        static constexpr const char* text_h_align_strings[TEXT_BATCH_H_ALIGN_COUNT] = {
-            "Left",
-            "Center",
-            "Right",
-        };
-        if (ImGui::BeginCombo("Text Horizontal Align", text_h_align_strings[as->text_h_align])) {
-          for (int i = 0; i < TEXT_BATCH_H_ALIGN_COUNT; i++) {
-            bool is_selected = as->text_h_align == i;
-            if (ImGui::Selectable(text_h_align_strings[i], is_selected)) {
-              as->text_h_align = static_cast<Text_Batch_H_Align>(i);
-            }
-            if (is_selected) { ImGui::SetItemDefaultFocus(); }
-          }
-          ImGui::EndCombo();
-        }
-      } break;
       case DEMO_KIND_TEXT_BATCH_STARWARS: {
-        ImGui::ColorEdit4("Text Outline Color", &as->text_outline_color.X);
-        ImGui::SliderFloat(
-            "Text Outline Thickness",
-            &as->text_outline_thickness,
-            0.0f,
-            0.4f,
-            "%.1f");
-
         ImGui::SliderFloat("Scroll Speed", &as->demo_starwars.scroll_speed, 0.0f, 200.0f, "%.0f");
 
         if (ImGui::Button("Reset")) { on_demo_kind_selection(as, DEMO_KIND_TEXT_BATCH_STARWARS); }

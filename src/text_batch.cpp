@@ -1,71 +1,73 @@
-static constexpr int TEXT_BATCH_MAX_DRAW_CMDS              = 8;
-static constexpr int TEXT_BATCH_MAX_INSTANCES_PER_DRAW_CMD = 8192;
-static constexpr int TEXT_BATCH_MAX_INSTANCES =
-    TEXT_BATCH_MAX_DRAW_CMDS * TEXT_BATCH_MAX_INSTANCES_PER_DRAW_CMD;
-static constexpr int TEXT_BATCH_INDICES_PER_INSTANCE = 6;
+static constexpr int TEXT_BATCH_MAX_DRAW_CMDS           = 8;
+static constexpr int TEXT_BATCH_MAX_GLYPHS_PER_DRAW_CMD = 8192;
+static constexpr int TEXT_BATCH_MAX_GLYPHS =
+    TEXT_BATCH_MAX_DRAW_CMDS * TEXT_BATCH_MAX_GLYPHS_PER_DRAW_CMD;
+static constexpr int TEXT_BATCH_INDICES_PER_GLYPH = 6;
 
-enum Text_Batch_H_Align {
-  TEXT_BATCH_H_ALIGN_LEFT,
-  TEXT_BATCH_H_ALIGN_CENTER,
-  TEXT_BATCH_H_ALIGN_RIGHT,
-  TEXT_BATCH_H_ALIGN_COUNT,
+enum Text_H_Align {
+  TEXT_H_ALIGN_LEFT,
+  TEXT_H_ALIGN_CENTER,
+  TEXT_H_ALIGN_RIGHT,
+  TEXT_H_ALIGN_COUNT,
 };
 
-enum Text_Batch_V_Align {
-  TEXT_BATCH_V_ALIGN_TOP,
-  TEXT_BATCH_V_ALIGN_MIDDLE,
-  TEXT_BATCH_V_ALIGN_BASELINE,
-  TEXT_BATCH_V_ALIGN_BOTTOM,
-  TEXT_BATCH_V_ALIGN_COUNT,
+enum Text_V_Align {
+  TEXT_V_ALIGN_TOP,
+  TEXT_V_ALIGN_MIDDLE,
+  TEXT_V_ALIGN_BASELINE,
+  TEXT_V_ALIGN_BOTTOM,
+  TEXT_V_ALIGN_COUNT,
 };
 
-struct Text_Batch_Instance {
+struct Text_Align {
+  Text_H_Align horizontal = TEXT_H_ALIGN_LEFT;
+  Text_V_Align vertical   = TEXT_V_ALIGN_TOP;
+};
+
+struct Text_Style {
+  HMM_Vec4 color             = HMM_V4(0.0f, 0.0f, 0.0f, 1.0f);
+  HMM_Vec4 outline_color     = HMM_V4(1.0f, 1.0f, 1.0f, 1.0f);
+  float    outline_thickness = 0.0f;
+};
+
+struct Text_Batch_Glyph {
   HMM_Vec3 position;
   float    size;
-  HMM_Vec4 color;
   HMM_Vec4 plane_bounds;
   HMM_Vec4 atlas_bounds;
+  HMM_Vec4 color;
+  HMM_Vec4 outline_color;
+  float    outline_thickness;
 };
 
 struct Text_Batch_Draw_Cmd {
-  SDL_GPUGraphicsPipeline* pipeline;
-  HMM_Vec4                 outline_color;
-  float                    outline_thickness;
-  HMM_Mat4                 world_to_clip_transform;
-  const Font_Atlas*        font_atlas;
-  int                      font_variant;
-  int                      first_instance;
-  int                      instances_count;
+  HMM_Mat4          world_to_clip_transform;
+  const Font_Atlas* font_atlas;
+  int               font_variant;
+  int               first_glyph;
+  int               glyphs_count;
 };
 
 struct Text_Batch {
   Text_Batch_Draw_Cmd      draw_cmds[TEXT_BATCH_MAX_DRAW_CMDS];
   int                      draw_cmds_count;
-  Text_Batch_Instance      instances[TEXT_BATCH_MAX_INSTANCES];
-  int                      total_instances_count;
+  Text_Batch_Glyph         glyphs[TEXT_BATCH_MAX_GLYPHS];
+  int                      total_glyphs_count;
   bool                     begin_called;
   SDL_GPUBuffer*           data_buffer;
   SDL_GPUTransferBuffer*   transfer_buffer;
-  SDL_GPUGraphicsPipeline* pipeline_basic;
-  SDL_GPUGraphicsPipeline* pipeline_outline;
+  SDL_GPUGraphicsPipeline* pipeline;
   SDL_GPUSampler*          sampler;
 };
 
 struct Vertex_Uniform_Data {
   HMM_Mat4 world_to_clip_transform;
-  uint32_t first_instance;
+  uint32_t first_glyph;
 };
 
-struct Fragment_Uniform_Data_Basic {
+struct Fragment_Uniform_Data {
   float    font_size;
   HMM_Vec2 unit_range;
-};
-
-struct Fragment_Uniform_Data_Outline {
-  float    font_size;
-  HMM_Vec2 unit_range;
-  HMM_Vec4 outline_color;
-  float    outline_thickness;
 };
 
 static bool text_batch_create(
@@ -78,7 +80,7 @@ static bool text_batch_create(
 
   {
     SDL_GPUBufferCreateInfo info = {};
-    info.size                    = sizeof(Text_Batch_Instance) * TEXT_BATCH_MAX_INSTANCES;
+    info.size                    = sizeof(Text_Batch_Glyph) * TEXT_BATCH_MAX_GLYPHS;
     info.usage                   = SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
     text_batch->data_buffer      = SDL_CreateGPUBuffer(device, &info);
     if (text_batch->data_buffer == nullptr) {
@@ -92,7 +94,7 @@ static bool text_batch_create(
 
   {
     SDL_GPUTransferBufferCreateInfo info = {};
-    info.size                            = sizeof(Text_Batch_Instance) * TEXT_BATCH_MAX_INSTANCES;
+    info.size                            = sizeof(Text_Batch_Glyph) * TEXT_BATCH_MAX_GLYPHS;
     info.usage                           = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     text_batch->transfer_buffer          = SDL_CreateGPUTransferBuffer(device, &info);
     if (text_batch->data_buffer == nullptr) {
@@ -153,9 +155,9 @@ static bool text_batch_create(
     }
     defer(SDL_ReleaseGPUShader(device, vertex_shader));
 
-    SDL_GPUShader* fragment_shader_basic;
+    SDL_GPUShader* fragment_shader;
     {
-      auto                 file_path = base_path + "/text_batch_basic.frag." + file_ext;
+      auto                 file_path = base_path + "/text_batch.frag." + file_ext;
       std::vector<uint8_t> file_contents;
       if (!read_file_contents(file_path.c_str(), &file_contents)) {
         SDL_LogError(
@@ -173,47 +175,16 @@ static bool text_batch_create(
       info.num_samplers            = 1;
       info.num_uniform_buffers     = 1;
       info.stage                   = SDL_GPU_SHADERSTAGE_FRAGMENT;
-      fragment_shader_basic        = SDL_CreateGPUShader(device, &info);
-      if (fragment_shader_basic == nullptr) {
+      fragment_shader              = SDL_CreateGPUShader(device, &info);
+      if (fragment_shader == nullptr) {
         SDL_LogError(
             SDL_LOG_CATEGORY_APPLICATION,
-            "Failed to create basic fragment shader: %s",
+            "Failed to create fragment shader: %s",
             SDL_GetError());
         return false;
       }
     }
-    defer(SDL_ReleaseGPUShader(device, fragment_shader_basic));
-
-    SDL_GPUShader* fragment_shader_outline;
-    {
-      auto                 file_path = base_path + "/text_batch_outline.frag." + file_ext;
-      std::vector<uint8_t> file_contents;
-      if (!read_file_contents(file_path.c_str(), &file_contents)) {
-        SDL_LogError(
-            SDL_LOG_CATEGORY_APPLICATION,
-            "Failed to read file contents: %s",
-            file_path.c_str());
-        return false;
-      }
-
-      SDL_GPUShaderCreateInfo info = {};
-      info.code                    = file_contents.data();
-      info.code_size               = file_contents.size();
-      info.entrypoint              = "main";
-      info.format                  = format;
-      info.num_samplers            = 1;
-      info.num_uniform_buffers     = 1;
-      info.stage                   = SDL_GPU_SHADERSTAGE_FRAGMENT;
-      fragment_shader_outline      = SDL_CreateGPUShader(device, &info);
-      if (fragment_shader_outline == nullptr) {
-        SDL_LogError(
-            SDL_LOG_CATEGORY_APPLICATION,
-            "Failed to create outline fragment shader: %s",
-            SDL_GetError());
-        return false;
-      }
-    }
-    defer(SDL_ReleaseGPUShader(device, fragment_shader_outline));
+    defer(SDL_ReleaseGPUShader(device, fragment_shader));
 
     SDL_GPUColorTargetDescription desc     = {};
     desc.format                            = swapchain_texture_format;
@@ -230,22 +201,12 @@ static bool text_batch_create(
     info.target_info.color_target_descriptions = &desc;
     info.primitive_type                        = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
     info.vertex_shader                         = vertex_shader;
-    info.fragment_shader                       = fragment_shader_basic;
-    text_batch->pipeline_basic                 = SDL_CreateGPUGraphicsPipeline(device, &info);
-    if (text_batch->pipeline_basic == nullptr) {
+    info.fragment_shader                       = fragment_shader;
+    text_batch->pipeline                       = SDL_CreateGPUGraphicsPipeline(device, &info);
+    if (text_batch->pipeline == nullptr) {
       SDL_LogError(
           SDL_LOG_CATEGORY_APPLICATION,
           "Failed to create basic pipeline: %s",
-          SDL_GetError());
-      return false;
-    }
-
-    info.fragment_shader         = fragment_shader_outline;
-    text_batch->pipeline_outline = SDL_CreateGPUGraphicsPipeline(device, &info);
-    if (text_batch->pipeline_outline == nullptr) {
-      SDL_LogError(
-          SDL_LOG_CATEGORY_APPLICATION,
-          "Failed to create outline pipeline: %s",
           SDL_GetError());
       return false;
     }
@@ -272,35 +233,34 @@ static bool text_batch_create(
 
 static void text_batch_destroy(Text_Batch* text_batch, SDL_GPUDevice* device) {
   SDL_assert(text_batch != nullptr);
+  SDL_assert(device != nullptr);
 
-  SDL_ReleaseGPUGraphicsPipeline(device, text_batch->pipeline_basic);
-  SDL_ReleaseGPUGraphicsPipeline(device, text_batch->pipeline_outline);
+  SDL_ReleaseGPUGraphicsPipeline(device, text_batch->pipeline);
   SDL_ReleaseGPUTransferBuffer(device, text_batch->transfer_buffer);
   SDL_ReleaseGPUBuffer(device, text_batch->data_buffer);
+  SDL_ReleaseGPUSampler(device, text_batch->sampler);
 }
 
 static Text_Batch_Draw_Cmd* text_batch_push_draw_cmd(
-    Text_Batch*              text_batch,
-    SDL_GPUGraphicsPipeline* pipeline,
-    const HMM_Mat4&          world_to_clip_transform,
-    const Font_Atlas*        font_atlas,
-    int                      font_variant) {
+    Text_Batch*       text_batch,
+    const HMM_Mat4&   world_to_clip_transform,
+    const Font_Atlas* font_atlas,
+    int               font_variant) {
   SDL_assert(text_batch->draw_cmds_count < TEXT_BATCH_MAX_DRAW_CMDS);
 
   auto draw_cmd                     = &text_batch->draw_cmds[text_batch->draw_cmds_count];
-  draw_cmd->pipeline                = pipeline;
   draw_cmd->world_to_clip_transform = world_to_clip_transform;
   draw_cmd->font_atlas              = font_atlas;
   draw_cmd->font_variant            = font_variant;
-  draw_cmd->first_instance  = text_batch->draw_cmds_count * TEXT_BATCH_MAX_INSTANCES_PER_DRAW_CMD;
-  draw_cmd->instances_count = 0;
+  draw_cmd->first_glyph  = text_batch->draw_cmds_count * TEXT_BATCH_MAX_GLYPHS_PER_DRAW_CMD;
+  draw_cmd->glyphs_count = 0;
 
   text_batch->draw_cmds_count += 1;
 
   return draw_cmd;
 }
 
-static void text_batch_begin_basic(
+static void text_batch_begin(
     Text_Batch*       text_batch,
     const HMM_Mat4&   world_to_clip_transform,
     const Font_Atlas* font_atlas,
@@ -312,40 +272,7 @@ static void text_batch_begin_basic(
   SDL_assert(text_batch->draw_cmds_count < TEXT_BATCH_MAX_DRAW_CMDS);
 
   text_batch->begin_called = true;
-
-  text_batch_push_draw_cmd(
-      text_batch,
-      text_batch->pipeline_basic,
-      world_to_clip_transform,
-      font_atlas,
-      font_variant);
-}
-
-static void text_batch_begin_outline(
-    Text_Batch*       text_batch,
-    const HMM_Mat4&   world_to_clip_transform,
-    const Font_Atlas* font_atlas,
-    int               font_variant,
-    HMM_Vec4          outline_color     = HMM_V4(0.0f, 0.0f, 0.0f, 1.0f),
-    float             outline_thickness = 0.4f) {
-  SDL_assert(text_batch != nullptr);
-  SDL_assert(font_atlas != nullptr);
-  SDL_assert(font_variant >= 0 && font_variant < font_atlas->variants.size());
-  SDL_assert(!text_batch->begin_called);
-  SDL_assert(text_batch->draw_cmds_count < TEXT_BATCH_MAX_DRAW_CMDS);
-  SDL_assert(outline_thickness >= 0.0f && outline_thickness <= 0.4f);
-
-  text_batch->begin_called = true;
-
-  auto draw_cmd = text_batch_push_draw_cmd(
-      text_batch,
-      text_batch->pipeline_outline,
-      world_to_clip_transform,
-      font_atlas,
-      font_variant);
-
-  draw_cmd->outline_color     = outline_color;
-  draw_cmd->outline_thickness = outline_thickness;
+  text_batch_push_draw_cmd(text_batch, world_to_clip_transform, font_atlas, font_variant);
 }
 
 static void text_batch_end(Text_Batch* text_batch) {
@@ -361,7 +288,7 @@ static void text_batch_draw_internal(
     std::string_view    text,
     HMM_Vec3            position,
     float               size,
-    HMM_Vec4            color) {
+    const Text_Style&   style) {
   SDL_assert(text_batch != nullptr);
   SDL_assert(text_batch->begin_called);
 
@@ -374,8 +301,8 @@ static void text_batch_draw_internal(
     codepoint = SDL_StepUTF8(&ptr, &str_size);
     if (codepoint == SDL_INVALID_UNICODE_CODEPOINT) { continue; }
 
-    auto glyph_it = font_data.glyphs.find(codepoint);
-    if (glyph_it == font_data.glyphs.end()) { continue; }
+    auto font_glyph_it = font_data.glyphs.find(codepoint);
+    if (font_glyph_it == font_data.glyphs.end()) { continue; }
 
     if (prev_codepoint != 0) {
       auto kerning_it = font_data.kernings.find(font_atlas_pack_kerning(prev_codepoint, codepoint));
@@ -387,48 +314,48 @@ static void text_batch_draw_internal(
 
     if (codepoint != 32) {
       auto draw_cmd = &text_batch->draw_cmds[text_batch->draw_cmds_count - 1];
-      if (draw_cmd->instances_count >= TEXT_BATCH_MAX_INSTANCES_PER_DRAW_CMD) {
+      if (draw_cmd->glyphs_count >= TEXT_BATCH_MAX_GLYPHS_PER_DRAW_CMD) {
         draw_cmd = text_batch_push_draw_cmd(
             text_batch,
-            draw_cmd->pipeline,
             draw_cmd->world_to_clip_transform,
             draw_cmd->font_atlas,
             draw_cmd->font_variant);
       }
 
-      auto instance = &text_batch->instances[text_batch->total_instances_count];
-      text_batch->total_instances_count += 1;
-      draw_cmd->instances_count += 1;
+      auto glyph = &text_batch->glyphs[text_batch->total_glyphs_count];
+      text_batch->total_glyphs_count += 1;
+      draw_cmd->glyphs_count += 1;
 
-      instance->position     = current_position;
-      instance->size         = size;
-      instance->color        = color;
-      instance->plane_bounds = HMM_V4(
-          glyph_it->second.plane_bounds.left,
-          glyph_it->second.plane_bounds.top,
-          glyph_it->second.plane_bounds.right,
-          glyph_it->second.plane_bounds.bottom);
-      float atlas_width      = static_cast<float>(draw_cmd->font_atlas->width);
-      float atlas_height     = static_cast<float>(draw_cmd->font_atlas->height);
-      instance->atlas_bounds = HMM_V4(
-          glyph_it->second.atlas_bounds.left / atlas_width,
-          1.0f - glyph_it->second.atlas_bounds.top / atlas_height,
-          glyph_it->second.atlas_bounds.right / atlas_width,
-          1.0f - glyph_it->second.atlas_bounds.bottom / atlas_height);
+      glyph->position     = current_position;
+      glyph->size         = size;
+      glyph->plane_bounds = HMM_V4(
+          font_glyph_it->second.plane_bounds.left,
+          font_glyph_it->second.plane_bounds.top,
+          font_glyph_it->second.plane_bounds.right,
+          font_glyph_it->second.plane_bounds.bottom);
+      float atlas_width   = static_cast<float>(draw_cmd->font_atlas->width);
+      float atlas_height  = static_cast<float>(draw_cmd->font_atlas->height);
+      glyph->atlas_bounds = HMM_V4(
+          font_glyph_it->second.atlas_bounds.left / atlas_width,
+          1.0f - font_glyph_it->second.atlas_bounds.top / atlas_height,
+          font_glyph_it->second.atlas_bounds.right / atlas_width,
+          1.0f - font_glyph_it->second.atlas_bounds.bottom / atlas_height);
+      glyph->color             = style.color;
+      glyph->outline_color     = style.outline_color;
+      glyph->outline_thickness = style.outline_thickness;
     }
 
-    current_position.X += glyph_it->second.horizontal_advance * size;
+    current_position.X += font_glyph_it->second.horizontal_advance * size;
   }
 }
 
 static void text_batch_draw(
-    Text_Batch*        text_batch,
-    std::string_view   text,
-    HMM_Vec3           position,
-    float              size,
-    Text_Batch_H_Align h_align = TEXT_BATCH_H_ALIGN_LEFT,
-    Text_Batch_V_Align v_align = TEXT_BATCH_V_ALIGN_TOP,
-    HMM_Vec4           color   = HMM_V4(1.0f, 1.0f, 1.0f, 1.0f)) {
+    Text_Batch*       text_batch,
+    std::string_view  text,
+    HMM_Vec3          position,
+    float             size,
+    const Text_Align& align = {},
+    const Text_Style& style = {}) {
   SDL_assert(text_batch != nullptr);
   SDL_assert(text_batch->begin_called);
 
@@ -436,45 +363,44 @@ static void text_batch_draw(
   const auto& font_data = draw_cmd.font_atlas->variants[draw_cmd.font_variant];
 
   HMM_Vec3 current_position = position;
-  switch (h_align) {
-  case TEXT_BATCH_H_ALIGN_CENTER:
+  switch (align.horizontal) {
+  case TEXT_H_ALIGN_CENTER:
     current_position.X -= font_atlas_string_width(font_data, text, size) * 0.5f;
     0.5f;
     break;
-  case TEXT_BATCH_H_ALIGN_RIGHT:
+  case TEXT_H_ALIGN_RIGHT:
     current_position.X -= font_atlas_string_width(font_data, text, size);
     break;
-  case TEXT_BATCH_H_ALIGN_LEFT:
+  case TEXT_H_ALIGN_LEFT:
   default:
     break;
   }
-  switch (v_align) {
-  case TEXT_BATCH_V_ALIGN_TOP:
+  switch (align.vertical) {
+  case TEXT_V_ALIGN_TOP:
     current_position.Y -= font_data.ascender * size;
     break;
-  case TEXT_BATCH_V_ALIGN_MIDDLE:
+  case TEXT_V_ALIGN_MIDDLE:
     current_position.Y -= (font_data.ascender + font_data.descender) * 0.5f * size;
     break;
-  case TEXT_BATCH_V_ALIGN_BOTTOM:
+  case TEXT_V_ALIGN_BOTTOM:
     current_position.Y -= font_data.descender * size;
     break;
-  case TEXT_BATCH_V_ALIGN_BASELINE:
+  case TEXT_V_ALIGN_BASELINE:
   default:
     break;
   }
 
-  text_batch_draw_internal(text_batch, font_data, text, current_position, size, color);
+  text_batch_draw_internal(text_batch, font_data, text, current_position, size, style);
 }
 
 static void text_batch_draw_multiline(
-    Text_Batch*        text_batch,
-    std::string_view   text,
-    HMM_Vec3           position,
-    float              size,
-    Text_Batch_H_Align h_align         = TEXT_BATCH_H_ALIGN_LEFT,
-    Text_Batch_V_Align v_align         = TEXT_BATCH_V_ALIGN_TOP,
-    HMM_Vec4           color           = HMM_V4(1.0f, 1.0f, 1.0f, 1.0f),
-    HMM_Vec2           text_block_size = HMM_V2(-1.0f, -1.0f)) {
+    Text_Batch*       text_batch,
+    std::string_view  text,
+    HMM_Vec3          position,
+    float             size,
+    const Text_Align& align           = {},
+    const Text_Style& style           = {},
+    HMM_Vec2          text_block_size = HMM_V2(-1.0f, -1.0f)) {
   SDL_assert(text_batch != nullptr);
   SDL_assert(text_batch->begin_called);
 
@@ -486,18 +412,18 @@ static void text_batch_draw_multiline(
   }
 
   float current_y = position.Y;
-  switch (v_align) {
-  case TEXT_BATCH_V_ALIGN_TOP:
+  switch (align.vertical) {
+  case TEXT_V_ALIGN_TOP:
     current_y -= font_data.ascender * size;
     break;
-  case TEXT_BATCH_V_ALIGN_MIDDLE:
+  case TEXT_V_ALIGN_MIDDLE:
     current_y = position.Y + text_block_size.Y * 0.5f - font_data.ascender * size;
     break;
-  case TEXT_BATCH_V_ALIGN_BOTTOM:
+  case TEXT_V_ALIGN_BOTTOM:
     current_y =
         position.Y + text_block_size.Y - font_data.line_height * size - font_data.descender * size;
     break;
-  case TEXT_BATCH_V_ALIGN_BASELINE:
+  case TEXT_V_ALIGN_BASELINE:
   default:
     break;
   }
@@ -505,20 +431,20 @@ static void text_batch_draw_multiline(
   auto draw_line = [&](std::string_view line) {
     HMM_Vec3 line_position = HMM_V3(position.X - text_block_size.X * 0.5f, current_y, position.Z);
 
-    switch (h_align) {
-    case TEXT_BATCH_H_ALIGN_CENTER:
+    switch (align.horizontal) {
+    case TEXT_H_ALIGN_CENTER:
       line_position.X +=
           (text_block_size.X - font_atlas_string_width(font_data, line, size)) * 0.5f;
       break;
-    case TEXT_BATCH_H_ALIGN_RIGHT:
+    case TEXT_H_ALIGN_RIGHT:
       line_position.X += text_block_size.X - font_atlas_string_width(font_data, line, size);
       break;
-    case TEXT_BATCH_H_ALIGN_LEFT:
+    case TEXT_H_ALIGN_LEFT:
     default:
       break;
     }
 
-    text_batch_draw_internal(text_batch, font_data, line, line_position, size, color);
+    text_batch_draw_internal(text_batch, font_data, line, line_position, size, style);
 
     current_y -= font_data.line_height * size;
   };
@@ -552,7 +478,7 @@ static void text_batch_prepare_draw_cmds(
   if (text_batch->draw_cmds_count == 0) { return; }
 
   {
-    Text_Batch_Instance* mapped_ptr = static_cast<Text_Batch_Instance*>(
+    auto mapped_ptr = static_cast<Text_Batch_Glyph*>(
         SDL_MapGPUTransferBuffer(device, text_batch->transfer_buffer, true));
     if (mapped_ptr == nullptr) {
       SDL_LogError(
@@ -565,8 +491,8 @@ static void text_batch_prepare_draw_cmds(
 
     SDL_memcpy(
         mapped_ptr,
-        text_batch->instances,
-        sizeof(Text_Batch_Instance) * text_batch->total_instances_count);
+        text_batch->glyphs,
+        sizeof(Text_Batch_Glyph) * text_batch->total_glyphs_count);
   }
 
   {
@@ -577,7 +503,7 @@ static void text_batch_prepare_draw_cmds(
     source.transfer_buffer               = text_batch->transfer_buffer;
     SDL_GPUBufferRegion dest             = {};
     dest.buffer                          = text_batch->data_buffer;
-    dest.size = sizeof(Text_Batch_Instance) * text_batch->total_instances_count;
+    dest.size = sizeof(Text_Batch_Glyph) * text_batch->total_glyphs_count;
     SDL_UploadToGPUBuffer(copy_pass, &source, &dest, true);
   }
 }
@@ -593,12 +519,12 @@ static void text_batch_render_draw_cmds(
 
   if (text_batch->draw_cmds_count == 0) { return; }
 
+  SDL_BindGPUGraphicsPipeline(render_pass, text_batch->pipeline);
+
   SDL_BindGPUVertexStorageBuffers(render_pass, 0, &text_batch->data_buffer, 1);
 
   for (int i = 0; i < text_batch->draw_cmds_count; i++) {
     const auto& draw_cmd = text_batch->draw_cmds[i];
-
-    SDL_BindGPUGraphicsPipeline(render_pass, draw_cmd.pipeline);
 
     {
       SDL_GPUTextureSamplerBinding binding = {};
@@ -610,34 +536,22 @@ static void text_batch_render_draw_cmds(
     {
       Vertex_Uniform_Data uniforms     = {};
       uniforms.world_to_clip_transform = draw_cmd.world_to_clip_transform;
-      uniforms.first_instance          = static_cast<uint32_t>(draw_cmd.first_instance);
+      uniforms.first_glyph             = static_cast<uint32_t>(draw_cmd.first_glyph);
       SDL_PushGPUVertexUniformData(cmd_buf, 0, &uniforms, sizeof(uniforms));
     }
 
     {
-      auto font_size = draw_cmd.font_atlas->size;
-      auto unit_range =
+      Fragment_Uniform_Data uniforms = {};
+      uniforms.font_size             = draw_cmd.font_atlas->size;
+      uniforms.unit_range =
           HMM_V2(draw_cmd.font_atlas->distance_range, draw_cmd.font_atlas->distance_range) /
           HMM_V2(draw_cmd.font_atlas->width, draw_cmd.font_atlas->height);
-
-      if (draw_cmd.pipeline == text_batch->pipeline_basic) {
-        Fragment_Uniform_Data_Basic uniforms = {};
-        uniforms.font_size                   = font_size;
-        uniforms.unit_range                  = unit_range;
-        SDL_PushGPUFragmentUniformData(cmd_buf, 0, &uniforms, sizeof(uniforms));
-      } else if (draw_cmd.pipeline == text_batch->pipeline_outline) {
-        Fragment_Uniform_Data_Outline uniforms = {};
-        uniforms.font_size                     = font_size;
-        uniforms.unit_range                    = unit_range;
-        uniforms.outline_color                 = draw_cmd.outline_color;
-        uniforms.outline_thickness             = draw_cmd.outline_thickness;
-        SDL_PushGPUFragmentUniformData(cmd_buf, 0, &uniforms, sizeof(uniforms));
-      }
+      SDL_PushGPUFragmentUniformData(cmd_buf, 0, &uniforms, sizeof(uniforms));
     }
 
     SDL_DrawGPUPrimitives(
         render_pass,
-        draw_cmd.instances_count * TEXT_BATCH_INDICES_PER_INSTANCE,
+        draw_cmd.glyphs_count * TEXT_BATCH_INDICES_PER_GLYPH,
         1,
         0,
         0);
@@ -645,5 +559,5 @@ static void text_batch_render_draw_cmds(
 
   text_batch->draw_cmds_count = 0;
   SDL_memset(text_batch->draw_cmds, 0, sizeof(text_batch->draw_cmds));
-  text_batch->total_instances_count = 0;
+  text_batch->total_glyphs_count = 0;
 }
