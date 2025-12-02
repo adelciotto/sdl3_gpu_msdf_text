@@ -38,24 +38,26 @@ if not exist build mkdir build
 pushd build
 
 if "%buildfonts%"=="1" (
-  %msdf_atlas_gen% -font ..\fonts\Roboto-Regular.ttf ^
-                   -and -font ..\fonts\Roboto-Bold.ttf ^
-                   -and -font ..\fonts\Roboto-Italic.ttf ^
-                   -and -font ..\fonts\Roboto-BoldItalic.ttf ^
-                   -and -font ..\fonts\Roboto-Light.ttf ^
+  %msdf_atlas_gen% -font ..\res\Roboto-Regular.ttf ^
+                   -and -font ..\res\Roboto-Bold.ttf ^
+                   -and -font ..\res\Roboto-Italic.ttf ^
+                   -and -font ..\res\Roboto-BoldItalic.ttf ^
+                   -and -font ..\res\Roboto-Light.ttf ^
                    %msdf_common% ^
                    -imageout roboto.png -json roboto.json || exit /b 1
-  %msdf_atlas_gen% -font ..\fonts\ScienceGothic-Regular.ttf ^
-                   -and -font ..\fonts\ScienceGothic-Bold.ttf ^
-                   -and -font ..\fonts\ScienceGothic-Light.ttf ^
+  %msdf_atlas_gen% -font ..\res\ScienceGothic-Regular.ttf ^
+                   -and -font ..\res\ScienceGothic-Bold.ttf ^
+                   -and -font ..\res\ScienceGothic-Light.ttf ^
                    %msdf_common% ^
                    -imageout science_gothic.png -json science_gothic.json || exit /b 1
-  %msdf_atlas_gen% -font ..\fonts\Limelight-Regular.ttf ^
+  %msdf_atlas_gen% -font ..\res\Limelight-Regular.ttf ^
                    %msdf_common% ^
                    -imageout limelight.png -json limelight.json || exit /b 1
 )
 %shadercross_vertex% ..\src\text_batch.hlsl -o text_batch.vert.dxil || exit /b 1
 %shadercross_fragment% ..\src\text_batch.hlsl -o text_batch.frag.dxil || exit /b 1
+%shadercross_vertex% ..\src\text_static.hlsl -o text_static.vert.dxil || exit /b 1
+%shadercross_fragment% ..\src\text_static.hlsl -o text_static.frag.dxil || exit /b 1
 %cl_compile% ..\src\sdl3_gpu_msdf_text.cpp ^
              ..\extern\imgui\imgui.cpp ^
              ..\extern\imgui\imgui_demo.cpp ^
@@ -66,6 +68,9 @@ if "%buildfonts%"=="1" (
              ..\extern\imgui\imgui_widgets.cpp ^
              %cl_link% /out:sdl3_gpu_msdf_text.exe || exit /b 1
 popd
+
+:: --- Copy Resources ---------------------------------------------------------
+if not exist build\shakespeare.txt copy res\shakespeare.txt build >nul
 
 :: --- Copy DLL's -------------------------------------------------------------
 if not exist build\SDL3.dll copy extern\SDL3\lib\x64\SDL3.dll build >nul

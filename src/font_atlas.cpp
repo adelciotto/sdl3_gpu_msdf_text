@@ -41,7 +41,7 @@ struct Font_Kerning {
   float advance;
 };
 
-struct Font_Variant {
+struct Font_Atlas_Variant {
   std::unordered_map<int, Font_Glyph> glyphs;
   std::unordered_map<uint64_t, float> kernings;
   float                               line_height;
@@ -50,12 +50,12 @@ struct Font_Variant {
 };
 
 struct Font_Atlas {
-  std::vector<Font_Variant> variants;
-  float                     distance_range;
-  float                     size;
-  int                       width;
-  int                       height;
-  SDL_GPUTexture*           texture;
+  std::vector<Font_Atlas_Variant> variants;
+  float                           distance_range;
+  float                           size;
+  int                             width;
+  int                             height;
+  SDL_GPUTexture*                 texture;
 };
 
 static uint64_t font_atlas_pack_kerning(int unicode1, int unicode2) {
@@ -83,7 +83,7 @@ void from_json(const nlohmann::json& j, Font_Kerning& kerning) {
   j.at("advance").get_to(kerning.advance);
 }
 
-void from_json(const nlohmann::json& j, Font_Variant& variant) {
+void from_json(const nlohmann::json& j, Font_Atlas_Variant& variant) {
   auto metrics_j = j.at("metrics");
   metrics_j.at("lineHeight").get_to(variant.line_height);
   metrics_j.at("ascender").get_to(variant.ascender);
@@ -218,61 +218,4 @@ static void font_atlas_destroy(Font_Atlas* font_atlas, SDL_GPUDevice* device) {
   SDL_assert(device != nullptr);
 
   SDL_ReleaseGPUTexture(device, font_atlas->texture);
-}
-
-static float
-font_atlas_string_width(const Font_Variant& font_data, std::string_view text, float size) {
-  float       width          = 0.0f;
-  const char* ptr            = text.data();
-  auto        str_size       = text.size();
-  int         codepoint      = SDL_INVALID_UNICODE_CODEPOINT;
-  int         prev_codepoint = 0;
-  while (codepoint != 0) {
-    codepoint = SDL_StepUTF8(&ptr, &str_size);
-    if (codepoint == SDL_INVALID_UNICODE_CODEPOINT) { continue; }
-
-    auto glyph_it = font_data.glyphs.find(codepoint);
-    if (glyph_it == font_data.glyphs.end()) { continue; }
-
-    if (prev_codepoint != 0) {
-      auto kerning_it = font_data.kernings.find(font_atlas_pack_kerning(prev_codepoint, codepoint));
-      if (kerning_it != font_data.kernings.end()) { width += kerning_it->second * size; }
-    }
-    prev_codepoint = codepoint;
-
-    width += glyph_it->second.horizontal_advance * size;
-  }
-  return width;
-}
-
-static HMM_Vec2 font_atlas_string_multiline_block_size(
-    const Font_Variant& font_data,
-    std::string_view    text,
-    float               size) {
-  int         lines_count    = 1;
-  float       max_line_width = 0.0f;
-  const char* ptr            = text.data();
-  auto        str_size       = text.size();
-  const char* line_start     = ptr;
-  int         codepoint      = SDL_INVALID_UNICODE_CODEPOINT;
-  while (codepoint != 0) {
-    codepoint = SDL_StepUTF8(&ptr, &str_size);
-    if (codepoint == SDL_INVALID_UNICODE_CODEPOINT) { continue; }
-
-    if (codepoint == 10) {
-      std::string_view line(line_start, static_cast<size_t>(ptr - line_start - 1));
-      float            line_width = font_atlas_string_width(font_data, line, size);
-      max_line_width              = std::max(max_line_width, line_width);
-      line_start                  = ptr;
-      lines_count += 1;
-    }
-  }
-
-  if (ptr > line_start) {
-    std::string_view line(line_start, static_cast<size_t>(ptr - line_start));
-    float            line_width = font_atlas_string_width(font_data, line, size);
-    max_line_width              = std::max(max_line_width, line_width);
-  }
-
-  return HMM_V2(max_line_width, lines_count * font_data.line_height * size);
 }

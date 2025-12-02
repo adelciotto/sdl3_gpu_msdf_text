@@ -2,33 +2,6 @@ static constexpr int TEXT_BATCH_MAX_DRAW_CMDS           = 8;
 static constexpr int TEXT_BATCH_MAX_GLYPHS_PER_DRAW_CMD = 8192;
 static constexpr int TEXT_BATCH_MAX_GLYPHS =
     TEXT_BATCH_MAX_DRAW_CMDS * TEXT_BATCH_MAX_GLYPHS_PER_DRAW_CMD;
-static constexpr int TEXT_BATCH_INDICES_PER_GLYPH = 6;
-
-enum Text_H_Align {
-  TEXT_H_ALIGN_LEFT,
-  TEXT_H_ALIGN_CENTER,
-  TEXT_H_ALIGN_RIGHT,
-  TEXT_H_ALIGN_COUNT,
-};
-
-enum Text_V_Align {
-  TEXT_V_ALIGN_TOP,
-  TEXT_V_ALIGN_MIDDLE,
-  TEXT_V_ALIGN_BASELINE,
-  TEXT_V_ALIGN_BOTTOM,
-  TEXT_V_ALIGN_COUNT,
-};
-
-struct Text_Align {
-  Text_H_Align horizontal = TEXT_H_ALIGN_LEFT;
-  Text_V_Align vertical   = TEXT_V_ALIGN_TOP;
-};
-
-struct Text_Style {
-  HMM_Vec4 color             = HMM_V4(0.0f, 0.0f, 0.0f, 1.0f);
-  HMM_Vec4 outline_color     = HMM_V4(1.0f, 1.0f, 1.0f, 1.0f);
-  float    outline_thickness = 0.0f;
-};
 
 struct Text_Batch_Glyph {
   HMM_Vec3 position;
@@ -60,12 +33,12 @@ struct Text_Batch {
   SDL_GPUSampler*          sampler;
 };
 
-struct Vertex_Uniform_Data {
+struct Text_Batch_Vertex_Uniforms {
   HMM_Mat4 world_to_clip_transform;
   uint32_t first_glyph;
 };
 
-struct Fragment_Uniform_Data {
+struct Text_Batch_Fragment_Uniforms {
   float    font_size;
   HMM_Vec2 unit_range;
 };
@@ -283,12 +256,12 @@ static void text_batch_end(Text_Batch* text_batch) {
 }
 
 static void text_batch_draw_internal(
-    Text_Batch*         text_batch,
-    const Font_Variant& font_data,
-    std::string_view    text,
-    HMM_Vec3            position,
-    float               size,
-    const Text_Style&   style) {
+    Text_Batch*               text_batch,
+    const Font_Atlas_Variant& font_data,
+    std::string_view          text,
+    HMM_Vec3                  position,
+    float                     size,
+    const Text_Style&         style) {
   SDL_assert(text_batch != nullptr);
   SDL_assert(text_batch->begin_called);
 
@@ -365,11 +338,11 @@ static void text_batch_draw(
   HMM_Vec3 current_position = position;
   switch (align.horizontal) {
   case TEXT_H_ALIGN_CENTER:
-    current_position.X -= font_atlas_string_width(font_data, text, size) * 0.5f;
+    current_position.X -= text_measure_width(font_data, text, size) * 0.5f;
     0.5f;
     break;
   case TEXT_H_ALIGN_RIGHT:
-    current_position.X -= font_atlas_string_width(font_data, text, size);
+    current_position.X -= text_measure_width(font_data, text, size);
     break;
   case TEXT_H_ALIGN_LEFT:
   default:
@@ -408,21 +381,24 @@ static void text_batch_draw_multiline(
   const auto& font_data = draw_cmd.font_atlas->variants[draw_cmd.font_variant];
 
   if (text_block_size == HMM_V2(-1.0f, -1.0f)) {
-    text_block_size = font_atlas_string_multiline_block_size(font_data, text, size);
+    text_block_size = text_measure_string_size(font_data, text, size);
   }
 
   float current_y = position.Y;
   switch (align.vertical) {
   case TEXT_V_ALIGN_TOP:
-    current_y -= font_data.ascender * size;
+    current_y = position.Y - font_data.ascender * size;
     break;
+
   case TEXT_V_ALIGN_MIDDLE:
-    current_y = position.Y + text_block_size.Y * 0.5f - font_data.ascender * size;
+    current_y = position.Y + (text_block_size.Y * 0.5f) - font_data.ascender * size;
     break;
+
   case TEXT_V_ALIGN_BOTTOM:
-    current_y =
-        position.Y + text_block_size.Y - font_data.line_height * size - font_data.descender * size;
+    current_y = position.Y - font_data.descender * size +
+                (text_block_size.Y - font_data.line_height * size);
     break;
+
   case TEXT_V_ALIGN_BASELINE:
   default:
     break;
@@ -433,11 +409,10 @@ static void text_batch_draw_multiline(
 
     switch (align.horizontal) {
     case TEXT_H_ALIGN_CENTER:
-      line_position.X +=
-          (text_block_size.X - font_atlas_string_width(font_data, line, size)) * 0.5f;
+      line_position.X += (text_block_size.X - text_measure_width(font_data, line, size)) * 0.5f;
       break;
     case TEXT_H_ALIGN_RIGHT:
-      line_position.X += text_block_size.X - font_atlas_string_width(font_data, line, size);
+      line_position.X += text_block_size.X - text_measure_width(font_data, line, size);
       break;
     case TEXT_H_ALIGN_LEFT:
     default:
@@ -534,27 +509,22 @@ static void text_batch_render_draw_cmds(
     }
 
     {
-      Vertex_Uniform_Data uniforms     = {};
-      uniforms.world_to_clip_transform = draw_cmd.world_to_clip_transform;
-      uniforms.first_glyph             = static_cast<uint32_t>(draw_cmd.first_glyph);
+      Text_Batch_Vertex_Uniforms uniforms = {};
+      uniforms.world_to_clip_transform    = draw_cmd.world_to_clip_transform;
+      uniforms.first_glyph                = static_cast<uint32_t>(draw_cmd.first_glyph);
       SDL_PushGPUVertexUniformData(cmd_buf, 0, &uniforms, sizeof(uniforms));
     }
 
     {
-      Fragment_Uniform_Data uniforms = {};
-      uniforms.font_size             = draw_cmd.font_atlas->size;
+      Text_Batch_Fragment_Uniforms uniforms = {};
+      uniforms.font_size                    = draw_cmd.font_atlas->size;
       uniforms.unit_range =
           HMM_V2(draw_cmd.font_atlas->distance_range, draw_cmd.font_atlas->distance_range) /
           HMM_V2(draw_cmd.font_atlas->width, draw_cmd.font_atlas->height);
       SDL_PushGPUFragmentUniformData(cmd_buf, 0, &uniforms, sizeof(uniforms));
     }
 
-    SDL_DrawGPUPrimitives(
-        render_pass,
-        draw_cmd.glyphs_count * TEXT_BATCH_INDICES_PER_GLYPH,
-        1,
-        0,
-        0);
+    SDL_DrawGPUPrimitives(render_pass, draw_cmd.glyphs_count * TEXT_INDICES_PER_GLYPH, 1, 0, 0);
   }
 
   text_batch->draw_cmds_count = 0;

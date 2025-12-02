@@ -19,11 +19,11 @@
 #include "imgui_font.cpp"
 #include "demo_strings.cpp"
 #include "font_atlas.cpp"
+#include "text.cpp"
 #include "text_batch.cpp"
 #include "text_static.cpp"
 
 // TODOs:
-// - Text Static.
 // - MSDFA atlases and a blur effect example.
 // - Add on hover descriptions for demo kinds.
 
@@ -31,6 +31,7 @@ enum Demo_Kind {
   DEMO_KIND_TEXT_BATCH_SINGLELINE,
   DEMO_KIND_TEXT_BATCH_MULTILINE,
   DEMO_KIND_TEXT_BATCH_STARWARS,
+  DEMO_KIND_TEXT_STATIC_SHAKESPEARE,
   DEMO_KIND_COUNT,
 };
 
@@ -55,11 +56,12 @@ struct App_State {
   int             font_variant;
   Font_Atlas      font_atlases[FONT_ATLAS_KIND_COUNT];
   Text_Batch      text_batch;
+  Text_Static     text_static;
   Demo_Kind       demo_kind;
   HMM_Vec2        text_block_size;
   HMM_Vec4        bg_color               = HMM_V4(0.078f, 0.076f, 0.069f, 1.0f);
   HMM_Mat4        view_to_clip_transform = HMM_M4D(1.0f);
-  float           text_size              = 72.0f;
+  float           text_size;
   Text_Align      text_align;
   Text_Style      text_style;
   struct {
@@ -75,6 +77,15 @@ struct App_State {
     float fade_out_timer;
     float fade_out_duration;
   } demo_starwars;
+  struct {
+    Text_Static_Data text_static_data;
+    HMM_Vec3         camera_position;
+    float            camera_yaw;
+    float            camera_pitch;
+    bool             mouse_captured;
+    float            mouse_sensitivity = 0.00085f;
+    float            move_speed        = 500.0f;
+  } demo_static;
 };
 
 static void update_demo_view_to_clip_transform(App_State* as) {
@@ -90,6 +101,7 @@ static void update_demo_view_to_clip_transform(App_State* as) {
         1.0f);
     break;
   case DEMO_KIND_TEXT_BATCH_STARWARS:
+  case DEMO_KIND_TEXT_STATIC_SHAKESPEARE:
     as->view_to_clip_transform = HMM_Perspective_RH_NO(
         HMM_ToRad(45.0f),
         as->window_size_pixels.X / as->window_size_pixels.Y,
@@ -136,7 +148,7 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
     as->font_atlas_kind       = FONT_ATLAS_KIND_ROBOTO;
     as->font_variant          = FONT_ATLAS_ROBOTO_VARIANT_BOLD_ITALIC;
     as->bg_color              = HMM_V4(0.97f, 0.95f, 0.86f, 1.0f);
-    as->text_size             = 120.0f;
+    as->text_size             = as->font_atlases[as->font_atlas_kind].size;
     as->text_align.horizontal = TEXT_H_ALIGN_CENTER;
     as->text_align.vertical   = TEXT_V_ALIGN_BASELINE;
     as->text_style.color      = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
@@ -145,8 +157,8 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
     as->font_variant    = 0;
     as->font_atlas_kind = FONT_ATLAS_KIND_LIMELIGHT;
     as->bg_color        = HMM_V4(0.97f, 0.95f, 0.86f, 1.0f);
-    as->text_size       = 72.0f;
-    as->text_block_size = font_atlas_string_multiline_block_size(
+    as->text_size       = as->font_atlases[as->font_atlas_kind].size;
+    as->text_block_size = text_measure_string_size(
         as->font_atlases[as->font_atlas_kind].variants[as->font_variant],
         demo_string_lorem_ipsum,
         as->text_size);
@@ -162,8 +174,8 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
     as->font_atlas_kind               = FONT_ATLAS_KIND_SCIENCE_GOTHIC;
     as->font_variant                  = FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_BOLD;
     as->bg_color                      = HMM_V4(0.0f, 0.0f, 0.0f, 1.0f);
-    as->text_size                     = 48.0f;
-    as->text_block_size               = font_atlas_string_multiline_block_size(
+    as->text_size                     = as->font_atlases[as->font_atlas_kind].size * 0.5f;
+    as->text_block_size               = text_measure_string_size(
         as->font_atlases[as->font_atlas_kind].variants[as->font_variant],
         demo_string_star_wars,
         as->text_size);
@@ -172,6 +184,19 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
     as->text_style.color             = HMM_V4(0.014f, 0.985f, 0.998f, 1.0f);
     as->text_style.outline_color     = HMM_V4(0.998f, 0.987f, 0.997f, 1.0f);
     as->text_style.outline_thickness = 0.4f;
+    break;
+  case DEMO_KIND_TEXT_STATIC_SHAKESPEARE:
+    as->font_atlas_kind             = FONT_ATLAS_KIND_ROBOTO;
+    as->font_variant                = FONT_ATLAS_ROBOTO_VARIANT_BOLD;
+    as->bg_color                    = HMM_V4(0.97f, 0.95f, 0.86f, 1.0f);
+    as->text_size                   = as->font_atlases[as->font_atlas_kind].size;
+    as->text_align                  = {};
+    as->text_style                  = {};
+    as->text_style.color            = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
+    as->demo_static.camera_position = HMM_V3(0.0f, 0.0f, 600.0f);
+    as->demo_static.camera_yaw      = 0.0f;
+    as->demo_static.camera_pitch    = 0.0f;
+    as->demo_static.mouse_captured  = false;
     break;
   default:
     break;
@@ -280,29 +305,6 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
     ImGui_ImplSDLGPU3_Init(&init_info);
   }
 
-  auto cmd_buf = SDL_AcquireGPUCommandBuffer(as->device);
-  if (cmd_buf == nullptr) {
-    SDL_LogError(
-        SDL_LOG_CATEGORY_APPLICATION,
-        "Failed to acquire command buffer: %s",
-        SDL_GetError());
-    return SDL_APP_FAILURE;
-  }
-  auto copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
-  for (int i = 0; i < FONT_ATLAS_KIND_COUNT; i++) {
-    if (!font_atlas_load(
-            &as->font_atlases[i],
-            static_cast<Font_Atlas_Kind>(i),
-            as->base_path,
-            as->device,
-            copy_pass)) {
-      SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font atlas");
-      return SDL_APP_FAILURE;
-    }
-  }
-  SDL_EndGPUCopyPass(copy_pass);
-  SDL_SubmitGPUCommandBuffer(cmd_buf);
-
   if (!text_batch_create(
           &as->text_batch,
           as->base_path,
@@ -310,6 +312,68 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
           as->swapchain_texture_format)) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create text batch");
     return SDL_APP_FAILURE;
+  }
+
+  if (!text_static_create(
+          &as->text_static,
+          as->base_path,
+          as->device,
+          as->swapchain_texture_format)) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create text static");
+    return SDL_APP_FAILURE;
+  }
+
+  {
+    auto cmd_buf = SDL_AcquireGPUCommandBuffer(as->device);
+    if (cmd_buf == nullptr) {
+      SDL_LogError(
+          SDL_LOG_CATEGORY_APPLICATION,
+          "Failed to acquire command buffer: %s",
+          SDL_GetError());
+      return SDL_APP_FAILURE;
+    }
+    defer(SDL_SubmitGPUCommandBuffer(cmd_buf));
+
+    {
+      auto copy_pass = SDL_BeginGPUCopyPass(cmd_buf);
+      defer(SDL_EndGPUCopyPass(copy_pass));
+
+      for (int i = 0; i < FONT_ATLAS_KIND_COUNT; i++) {
+        if (!font_atlas_load(
+                &as->font_atlases[i],
+                static_cast<Font_Atlas_Kind>(i),
+                as->base_path,
+                as->device,
+                copy_pass)) {
+          SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font atlas");
+          return SDL_APP_FAILURE;
+        }
+      }
+
+      std::string demo_string_shakespeare;
+      {
+        auto file_path = as->base_path + "/shakespeare.txt";
+        if (!read_file_contents(file_path, &demo_string_shakespeare)) {
+          SDL_LogError(
+              SDL_LOG_CATEGORY_APPLICATION,
+              "Failed to read file contents: %s",
+              file_path.c_str());
+          return SDL_APP_FAILURE;
+        }
+      }
+      if (!text_static_data_create_multiline(
+              &as->demo_static.text_static_data,
+              as->device,
+              copy_pass,
+              &as->font_atlases[FONT_ATLAS_KIND_ROBOTO],
+              FONT_ATLAS_ROBOTO_VARIANT_BOLD,
+              demo_string_shakespeare,
+              HMM_V3(0.0f, 0.0f, 0.0f),
+              16.0f)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create text static data");
+        return SDL_APP_FAILURE;
+      }
+    }
   }
 
   on_vsync_changed(as, as->vsync);
@@ -330,8 +394,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
 SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
   auto as = static_cast<App_State*>(appstate);
 
-  ImGui_ImplSDL3_ProcessEvent(event);
-  auto& io = ImGui::GetIO();
+  auto& io                  = ImGui::GetIO();
+  bool  process_imgui_event = true;
 
   switch (event->type) {
   case SDL_EVENT_QUIT:
@@ -349,29 +413,61 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event) {
     on_display_content_scale_changed(as, SDL_GetDisplayContentScale(event->display.displayID));
     break;
   case SDL_EVENT_MOUSE_MOTION: {
-    if (as->demo_kind == DEMO_KIND_TEXT_BATCH_MULTILINE && !io.WantCaptureMouse) {
-      if ((event->motion.state & SDL_BUTTON_LEFT) != 0) {
-        as->demo_multiline.camera_position += HMM_V2(event->motion.xrel, -event->motion.yrel);
+    if (!io.WantCaptureMouse) {
+      if (as->demo_kind == DEMO_KIND_TEXT_BATCH_MULTILINE) {
+        if ((event->motion.state & SDL_BUTTON_LEFT) != 0) {
+          as->demo_multiline.camera_position += HMM_V2(event->motion.xrel, -event->motion.yrel);
+        }
+      }
+      if (as->demo_kind == DEMO_KIND_TEXT_STATIC_SHAKESPEARE) {
+        if (as->demo_static.mouse_captured) {
+          as->demo_static.camera_yaw += event->motion.xrel * as->demo_static.mouse_sensitivity;
+          as->demo_static.camera_pitch -= event->motion.yrel * as->demo_static.mouse_sensitivity;
+          as->demo_static.camera_pitch =
+              HMM_Clamp(-HMM_PI32 * 0.49f, as->demo_static.camera_pitch, HMM_PI32 * 0.49f);
+          process_imgui_event = false;
+        }
       }
     }
   } break;
   case SDL_EVENT_MOUSE_WHEEL: {
-    if (as->demo_kind == DEMO_KIND_TEXT_BATCH_MULTILINE && !io.WantCaptureMouse) {
-      HMM_Vec2 mouse_pos =
-          HMM_V2(event->wheel.mouse_x, as->window_size_pixels.Y - event->wheel.mouse_y);
-      HMM_Vec2 last_mouse_world =
-          (mouse_pos - as->demo_multiline.camera_position) / as->demo_multiline.camera_zoom;
+    if (!io.WantCaptureMouse) {
+      if (as->demo_kind == DEMO_KIND_TEXT_BATCH_MULTILINE) {
+        HMM_Vec2 mouse_pos =
+            HMM_V2(event->wheel.mouse_x, as->window_size_pixels.Y - event->wheel.mouse_y);
+        HMM_Vec2 last_mouse_world =
+            (mouse_pos - as->demo_multiline.camera_position) / as->demo_multiline.camera_zoom;
 
-      as->demo_multiline.camera_zoom += event->wheel.y * 0.1f * as->demo_multiline.camera_zoom;
-      as->demo_multiline.camera_zoom = HMM_Clamp(0.25f, as->demo_multiline.camera_zoom, 15.0f);
+        as->demo_multiline.camera_zoom += event->wheel.y * 0.1f * as->demo_multiline.camera_zoom;
+        as->demo_multiline.camera_zoom = HMM_Clamp(0.25f, as->demo_multiline.camera_zoom, 15.0f);
 
-      HMM_Vec2 mouse_world =
-          (mouse_pos - as->demo_multiline.camera_position) / as->demo_multiline.camera_zoom;
-      as->demo_multiline.camera_position +=
-          (mouse_world - last_mouse_world) * as->demo_multiline.camera_zoom;
+        HMM_Vec2 mouse_world =
+            (mouse_pos - as->demo_multiline.camera_position) / as->demo_multiline.camera_zoom;
+        as->demo_multiline.camera_position +=
+            (mouse_world - last_mouse_world) * as->demo_multiline.camera_zoom;
+      }
+    }
+  } break;
+  case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+    if (!io.WantCaptureMouse) {
+      if (as->demo_kind == DEMO_KIND_TEXT_STATIC_SHAKESPEARE &&
+          event->button.button == SDL_BUTTON_LEFT) {
+        as->demo_static.mouse_captured = true;
+        SDL_SetWindowRelativeMouseMode(as->window, true);
+      }
+    }
+  } break;
+  case SDL_EVENT_KEY_DOWN: {
+    if (!io.WantCaptureKeyboard) {
+      if (as->demo_kind == DEMO_KIND_TEXT_STATIC_SHAKESPEARE && event->key.key == SDLK_ESCAPE) {
+        as->demo_static.mouse_captured = false;
+        SDL_SetWindowRelativeMouseMode(as->window, false);
+      }
     }
   } break;
   }
+
+  if (process_imgui_event) { ImGui_ImplSDL3_ProcessEvent(event); }
 
   return SDL_APP_CONTINUE;
 }
@@ -434,7 +530,7 @@ static void update_and_draw_demo(App_State* as, float dt) {
   } break;
   case DEMO_KIND_TEXT_BATCH_STARWARS: {
     float alpha = as->text_style.color.A;
-    if (as->demo_starwars.scroll_position > 2000.0f) {
+    if (as->demo_starwars.scroll_position > 2500.0f) {
       if (as->demo_starwars.fade_out_timer > 0.0f) {
         float progress = as->demo_starwars.fade_out_timer / as->demo_starwars.fade_out_duration;
         alpha          = HMM_Lerp(as->text_style.color.A, 1.0f - progress, 0.0f);
@@ -481,6 +577,22 @@ static void update_and_draw_demo(App_State* as, float dt) {
         as->text_block_size);
     text_batch_end(&as->text_batch);
   } break;
+  case DEMO_KIND_TEXT_STATIC_SHAKESPEARE: {
+    HMM_Vec3 forward = HMM_V3(
+        HMM_SinF(as->demo_static.camera_yaw) * HMM_CosF(as->demo_static.camera_pitch),
+        HMM_SinF(as->demo_static.camera_pitch),
+        -HMM_CosF(as->demo_static.camera_yaw) * HMM_CosF(as->demo_static.camera_pitch));
+    HMM_Vec3 right =
+        HMM_V3(HMM_CosF(as->demo_static.camera_yaw), 0.0f, HMM_SinF(as->demo_static.camera_yaw));
+
+    auto  key_state  = SDL_GetKeyboardState(nullptr);
+    float move_speed = as->demo_static.move_speed * dt;
+
+    if (key_state[SDL_SCANCODE_W]) { as->demo_static.camera_position += forward * move_speed; }
+    if (key_state[SDL_SCANCODE_S]) { as->demo_static.camera_position -= forward * move_speed; }
+    if (key_state[SDL_SCANCODE_D]) { as->demo_static.camera_position += right * move_speed; }
+    if (key_state[SDL_SCANCODE_A]) { as->demo_static.camera_position -= right * move_speed; }
+  } break;
   default:
     break;
   }
@@ -492,6 +604,7 @@ static void draw_imgui(App_State* as) {
         "Text Batch Single-Line",
         "Text Batch Multi-Line",
         "Text Batch Star Wars",
+        "Text Static Shakespeare",
     };
     if (ImGui::BeginCombo("Demo Selection", demo_kind_strings[as->demo_kind])) {
       for (int i = 0; i < DEMO_KIND_COUNT; i++) {
@@ -511,60 +624,16 @@ static void draw_imgui(App_State* as) {
       SDL_SetWindowFullscreen(as->window, as->fullscreen);
     }
 
-    ImGui::Separator();
-
     auto& io = ImGui::GetIO();
     ImGui::Text(
         "Application average %.3f ms/frame (%.1f FPS)",
         1000.0f / io.Framerate,
         io.Framerate);
 
+    ImGui::Separator();
+
     if (ImGui::CollapsingHeader("Demo Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
       const auto& font_atlas = as->font_atlases[as->font_atlas_kind];
-
-      ImGui::ColorEdit4("Text Color", &as->text_style.color.X);
-      ImGui::ColorEdit4("Text Outline Color", &as->text_style.outline_color.X);
-      ImGui::SliderFloat(
-          "Text Outline Thickness",
-          &as->text_style.outline_thickness,
-          0.0f,
-          0.4f,
-          "%.1f");
-
-      static constexpr const char* text_h_align_strings[TEXT_H_ALIGN_COUNT] = {
-          "Left",
-          "Center",
-          "Right",
-      };
-      if (ImGui::BeginCombo(
-              "Text Horizontal Align",
-              text_h_align_strings[as->text_align.horizontal])) {
-        for (int i = 0; i < TEXT_H_ALIGN_COUNT; i++) {
-          bool is_selected = as->text_align.horizontal == i;
-          if (ImGui::Selectable(text_h_align_strings[i], is_selected)) {
-            as->text_align.horizontal = static_cast<Text_H_Align>(i);
-          }
-          if (is_selected) { ImGui::SetItemDefaultFocus(); }
-        }
-        ImGui::EndCombo();
-      }
-
-      static constexpr const char* text_v_align_strings[TEXT_V_ALIGN_COUNT] = {
-          "Top",
-          "Middle",
-          "Baseline",
-          "Bottom",
-      };
-      if (ImGui::BeginCombo("Text Vertical Align", text_v_align_strings[as->text_align.vertical])) {
-        for (int i = 0; i < TEXT_V_ALIGN_COUNT; i++) {
-          bool is_selected = as->text_align.vertical == i;
-          if (ImGui::Selectable(text_v_align_strings[i], is_selected)) {
-            as->text_align.vertical = static_cast<Text_V_Align>(i);
-          }
-          if (is_selected) { ImGui::SetItemDefaultFocus(); }
-        }
-        ImGui::EndCombo();
-      }
 
       switch (as->demo_kind) {
       case DEMO_KIND_TEXT_BATCH_SINGLELINE: {
@@ -596,15 +665,83 @@ static void draw_imgui(App_State* as) {
             "%f",
             as->text_size / font_atlas.size * font_atlas.distance_range);
       } break;
+      case DEMO_KIND_TEXT_BATCH_MULTILINE: {
+        ImGui::Text("Controls: Scroll to zoom in/out, Left mouse-down and move to pan.");
+      } break;
       case DEMO_KIND_TEXT_BATCH_STARWARS: {
         ImGui::SliderFloat("Scroll Speed", &as->demo_starwars.scroll_speed, 0.0f, 200.0f, "%.0f");
-
         if (ImGui::Button("Reset")) { on_demo_kind_selection(as, DEMO_KIND_TEXT_BATCH_STARWARS); }
+      } break;
+      case DEMO_KIND_TEXT_STATIC_SHAKESPEARE: {
+        ImGui::Text("Controls: WSAD to move, Mouse move to aim.");
+        ImGui::Text(
+            "Click on the screen to capture mouse. Press escape to uncapture and use the UI.");
+
+        ImGui::LabelText(
+            "Camera Position",
+            "[%.3f, %.3f, %.3f]",
+            as->demo_static.camera_position.X,
+            as->demo_static.camera_position.Y,
+            as->demo_static.camera_position.Z);
+
+        ImGui::SliderFloat(
+            "Aim Sensitivity",
+            &as->demo_static.mouse_sensitivity,
+            0.0001f,
+            0.005f,
+            "%.5f");
+        ImGui::SliderFloat("Move Speed", &as->demo_static.move_speed, 100.0f, 10000.0f);
       } break;
       default:
         break;
       }
     }
+
+    ImGui::ColorEdit4("Text Color", &as->text_style.color.X);
+    ImGui::ColorEdit4("Text Outline Color", &as->text_style.outline_color.X);
+    ImGui::SliderFloat(
+        "Text Outline Thickness",
+        &as->text_style.outline_thickness,
+        0.0f,
+        0.4f,
+        "%.1f");
+
+    ImGui::BeginDisabled(as->demo_kind == DEMO_KIND_TEXT_STATIC_SHAKESPEARE);
+    static constexpr const char* text_h_align_strings[TEXT_H_ALIGN_COUNT] = {
+        "Left",
+        "Center",
+        "Right",
+    };
+    static constexpr const char* text_v_align_strings[TEXT_V_ALIGN_COUNT] = {
+        "Top",
+        "Middle",
+        "Baseline",
+        "Bottom",
+    };
+    if (ImGui::BeginCombo(
+            "Text Horizontal Align",
+            text_h_align_strings[as->text_align.horizontal])) {
+      for (int i = 0; i < TEXT_H_ALIGN_COUNT; i++) {
+        bool is_selected = as->text_align.horizontal == i;
+        if (ImGui::Selectable(text_h_align_strings[i], is_selected)) {
+          as->text_align.horizontal = static_cast<Text_H_Align>(i);
+        }
+        if (is_selected) { ImGui::SetItemDefaultFocus(); }
+      }
+      ImGui::EndCombo();
+    }
+    if (ImGui::BeginCombo("Text Vertical Align", text_v_align_strings[as->text_align.vertical])) {
+      for (int i = 0; i < TEXT_V_ALIGN_COUNT; i++) {
+        bool is_selected = as->text_align.vertical == i;
+        if (ImGui::Selectable(text_v_align_strings[i], is_selected)) {
+          as->text_align.vertical = static_cast<Text_V_Align>(i);
+        }
+        if (is_selected) { ImGui::SetItemDefaultFocus(); }
+      }
+      ImGui::EndCombo();
+    }
+    ImGui::EndDisabled();
+
     ImGui::Separator();
 
     if (ImGui::CollapsingHeader("Font Atlas", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -746,6 +883,27 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
 
       text_batch_render_draw_cmds(&as->text_batch, cmd_buf, render_pass);
 
+      if (as->demo_kind == DEMO_KIND_TEXT_STATIC_SHAKESPEARE) {
+        auto camera_forward = HMM_V3(
+            HMM_SinF(as->demo_static.camera_yaw) * HMM_CosF(as->demo_static.camera_pitch),
+            HMM_SinF(as->demo_static.camera_pitch),
+            -HMM_CosF(as->demo_static.camera_yaw) * HMM_CosF(as->demo_static.camera_pitch));
+        auto camera_up = HMM_V3(0.0f, 1.0f, 0.0f);
+
+        // Create view matrix with rotation only (camera at origin looking in the direction).
+        auto rotation_view_transform = HMM_LookAt_RH(HMM_V3(0, 0, 0), camera_forward, camera_up);
+        auto view_to_clip_transform  = as->view_to_clip_transform * rotation_view_transform;
+
+        text_static_draw(
+            &as->text_static,
+            cmd_buf,
+            render_pass,
+            as->demo_static.text_static_data,
+            view_to_clip_transform,
+            as->demo_static.camera_position,
+            as->text_style);
+      }
+
       ImGui_ImplSDLGPU3_RenderDrawData(draw_data, cmd_buf, render_pass);
     }
   }
@@ -760,7 +918,10 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result) {
 
   SDL_WaitForGPUIdle(as->device);
 
+  text_static_data_destroy(&as->demo_static.text_static_data, as->device);
+  text_static_destroy(&as->text_static, as->device);
   text_batch_destroy(&as->text_batch, as->device);
+
   for (int i = 0; i < FONT_ATLAS_KIND_COUNT; i++) {
     font_atlas_destroy(&as->font_atlases[i], as->device);
   }
