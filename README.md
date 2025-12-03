@@ -90,7 +90,7 @@ TODO
 
 - [x] Add Text_Static abstraction and example for drawing lots of static pre-uploaded text (millions of glyphs).
 - [ ] Add blur effect and use mtsdf atlases.
-- [ ] Upload pre-built windows exe to releases.
+- [x] Upload pre-built windows exe to releases.
 - [ ] Build scripts and testing on Linux.
 
 ## References
@@ -98,6 +98,7 @@ TODO
 * https://github.com/Chlumsky/msdfgen
 * https://moonside.games/posts/sdl-gpu-sprite-batcher/
 * https://github.com/TheSpydog/SDL_gpu_examples
+* https://www.redblobgames.com/articles/sdf-fonts/ - Really good article that contains a lot of useful information. Specifically if you want to use a single shader/pipeline and support all different kinds of effects (outlines, drop shadows, blurring, etc).
 
 ## Dependencies / Tools
 
