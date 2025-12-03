@@ -132,7 +132,7 @@ static bool font_atlas_load(
   };
   auto atlas_name = font_atlas_kind_names[kind];
 
-  auto        json_file_path = base_path + "/" + atlas_name + ".json";
+  auto        json_file_path = base_path + "/res/" + atlas_name + ".json";
   std::string json_file_contents;
   if (!read_file_contents(json_file_path, &json_file_contents)) {
     SDL_LogError(
@@ -151,10 +151,13 @@ static bool font_atlas_load(
   }
 
   int  x, y, n;
-  auto png_file_path = base_path + "/" + atlas_name + ".png";
+  auto png_file_path = base_path + "/res/" + atlas_name + ".png";
   auto pixels        = stbi_load(png_file_path.c_str(), &x, &y, &n, 4);
   if (pixels == nullptr) {
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load image data from: %s", png_file_path);
+    SDL_LogError(
+        SDL_LOG_CATEGORY_APPLICATION,
+        "Failed to load image data from: %s",
+        png_file_path.c_str());
     return false;
   }
   defer(stbi_image_free(pixels));

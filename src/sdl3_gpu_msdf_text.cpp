@@ -153,7 +153,7 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
     as->text_align.horizontal = TEXT_H_ALIGN_CENTER;
     as->text_align.vertical   = TEXT_V_ALIGN_BASELINE;
     as->text_style.color      = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
-    as->demo_singleline.text       = "Example Text!";
+    as->demo_singleline.text  = "Example Text!";
     break;
   case DEMO_KIND_TEXT_BATCH_MULTILINE:
     as->font_variant    = 0;
@@ -354,7 +354,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
 
       std::string demo_string_shakespeare;
       {
-        auto file_path = as->base_path + "/shakespeare.txt";
+        auto file_path = as->base_path + "/res/shakespeare.txt";
         if (!read_file_contents(file_path, &demo_string_shakespeare)) {
           SDL_LogError(
               SDL_LOG_CATEGORY_APPLICATION,

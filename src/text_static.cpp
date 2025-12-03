@@ -59,7 +59,7 @@ static bool text_static_create(
 
     SDL_GPUShader* vertex_shader;
     {
-      auto                 file_path = base_path + "/text_static.vert." + file_ext;
+      auto                 file_path = base_path + "/res/text_static.vert." + file_ext;
       std::vector<uint8_t> file_contents;
       if (!read_file_contents(file_path.c_str(), &file_contents)) {
         SDL_LogError(
@@ -90,7 +90,7 @@ static bool text_static_create(
 
     SDL_GPUShader* fragment_shader;
     {
-      auto                 file_path = base_path + "/text_static.frag." + file_ext;
+      auto                 file_path = base_path + "/res/text_static.frag." + file_ext;
       std::vector<uint8_t> file_contents;
       if (!read_file_contents(file_path.c_str(), &file_contents)) {
         SDL_LogError(
