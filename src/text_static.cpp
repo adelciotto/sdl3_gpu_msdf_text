@@ -24,9 +24,11 @@ struct Text_Static_Vertex_Uniforms {
 struct Text_Static_Fragment_Uniforms {
   float    font_size;
   HMM_Vec2 unit_range;
+  HMM_Vec4 fog_color;
   HMM_Vec4 color;
   HMM_Vec4 outline_color;
   float    outline_thickness;
+  uint32_t fog_enabled;
 };
 
 static bool text_static_create(
@@ -368,7 +370,9 @@ static void text_static_draw(
     SDL_GPURenderPass*      render_pass,
     const Text_Static_Data& text_data,
     const HMM_Mat4&         view_to_clip_transform,
-    const HMM_Vec3&         camera_position,
+    HMM_Vec3                camera_position,
+    bool                    fog_enabled,
+    HMM_Vec4                fog_color,
     const Text_Style&       style = {}) {
   SDL_assert(text_static != nullptr);
   SDL_assert(cmd_buf != nullptr);
@@ -400,6 +404,8 @@ static void text_static_draw(
     uniforms.color             = style.color;
     uniforms.outline_color     = style.outline_color;
     uniforms.outline_thickness = style.outline_thickness;
+    uniforms.fog_color         = fog_color;
+    uniforms.fog_enabled       = static_cast<uint32_t>(fog_enabled);
     SDL_PushGPUFragmentUniformData(cmd_buf, 0, &uniforms, sizeof(uniforms));
   }
 

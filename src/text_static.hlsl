@@ -9,7 +9,8 @@ struct Glpyh_Data {
 StructuredBuffer<Glpyh_Data> Data_Buffer : register(t0, space0);
 
 struct Output {
-  float2 texcoord : TEXCOORD3;
+  float2 texcoord : TEXCOORD0;
+  float  fog_factor : TEXCOORD1;
   float4 position : SV_Position;
 };
 
@@ -18,7 +19,9 @@ cbuffer Uniform_Block : register(b0, space1) {
   float3   camera_position : packoffset(c4);
 }
 
-static const uint TRIANGLE_INDICES[6] = {0, 1, 2, 3, 2, 1};
+static const uint  TRIANGLE_INDICES[6] = {0, 1, 2, 3, 2, 1};
+static const float FOG_START           = 0.0f;
+static const float FOG_END             = 10000.0f;
 
 Output main(uint id : SV_VertexID) {
   uint       glyph_index  = id / 6;
@@ -47,6 +50,7 @@ Output main(uint id : SV_VertexID) {
   float3 view_position  = world_position - camera_position;
   output.position       = mul(view_to_clip_transform, float4(view_position, 1.0f));
   output.texcoord       = vertex_texcoord[vertex_index];
+  output.fog_factor = clamp((FOG_END - length(view_position)) / (FOG_END - FOG_START), 0.0f, 1.0f);
 
   return output;
 }
@@ -57,15 +61,18 @@ Texture2D<float4> Texture : register(t0, space2);
 SamplerState      Sampler : register(s0, space2);
 
 struct Input {
-  float2 texcoord : TEXCOORD3;
+  float2 texcoord : TEXCOORD0;
+  float  fog_factor : TEXCOORD1;
 };
 
 cbuffer Uniform_Block : register(b0, space3) {
   float  font_size : packoffset(c0);
   float2 unit_range : packoffset(c0.y);
-  float4 color : packoffset(c1.x);
-  float4 outline_color : packoffset(c2.x);
-  float  outline_thickness : packoffset(c3.x);
+  float4 fog_color : packoffset(c1);
+  float4 color : packoffset(c2);
+  float4 outline_color : packoffset(c3);
+  float  outline_thickness : packoffset(c4);
+  uint   fog_enabled : packoffset(c4.y);
 }
 
 float screen_pixel_range(float2 texcoord) {
@@ -112,6 +119,7 @@ float4 main(Input input) : SV_Target0 {
 
   float4 final_color = color;
   final_color.a *= opacity;
+  if (fog_enabled == 1) final_color.rgb = lerp(fog_color.rgb, final_color.rgb, input.fog_factor);
   final_color.rgb *= final_color.a;
 
   return final_color;

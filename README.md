@@ -47,22 +47,22 @@ You should see the following output:
 
 ```
 [release mode]
-Loaded geometry of 95 out of 95 glyphs from font "..\fonts\Roboto-Regular.ttf".
-Loaded geometry of 95 out of 95 glyphs from font "..\fonts\Roboto-Bold.ttf".
-Loaded geometry of 95 out of 95 glyphs from font "..\fonts\Roboto-Italic.ttf".
-Loaded geometry of 95 out of 95 glyphs from font "..\fonts\Roboto-BoldItalic.ttf".
-Loaded geometry of 95 out of 95 glyphs from font "..\fonts\Roboto-Light.ttf".
-Atlas dimensions: 1000 x 1000
+Loaded geometry of 95 out of 95 glyphs from font "..\res\Roboto-Regular.ttf".
+Loaded geometry of 95 out of 95 glyphs from font "..\res\Roboto-Bold.ttf".
+Loaded geometry of 95 out of 95 glyphs from font "..\res\Roboto-Italic.ttf".
+Loaded geometry of 95 out of 95 glyphs from font "..\res\Roboto-BoldItalic.ttf".
+Loaded geometry of 95 out of 95 glyphs from font "..\res\Roboto-Light.ttf".
+Atlas dimensions: 1768 x 1768
 Atlas image file saved.
 Glyph layout and metadata written into JSON file.
-Loaded geometry of 95 out of 95 glyphs from font "..\fonts\ScienceGothic-Regular.ttf".
-Loaded geometry of 95 out of 95 glyphs from font "..\fonts\ScienceGothic-Bold.ttf".
-Loaded geometry of 95 out of 95 glyphs from font "..\fonts\ScienceGothic-Light.ttf".
-Atlas dimensions: 844 x 844
+Loaded geometry of 95 out of 95 glyphs from font "..\res\ScienceGothic-Regular.ttf".
+Loaded geometry of 95 out of 95 glyphs from font "..\res\ScienceGothic-Bold.ttf".
+Loaded geometry of 95 out of 95 glyphs from font "..\res\ScienceGothic-Light.ttf".
+Atlas dimensions: 1488 x 1488
 Atlas image file saved.
 Glyph layout and metadata written into JSON file.
 Loaded geometry of 95 out of 95 glyphs.
-Atlas dimensions: 480 x 480
+Atlas dimensions: 840 x 840
 Atlas image file saved.
 Glyph layout and metadata written into JSON file.
 sdl3_gpu_msdf_text.cpp

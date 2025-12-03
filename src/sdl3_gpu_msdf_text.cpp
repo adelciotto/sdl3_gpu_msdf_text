@@ -65,8 +65,8 @@ struct App_State {
   Text_Align      text_align;
   Text_Style      text_style;
   struct {
-    std::string text = "Example Text!";
-  } demo_basic;
+    std::string text;
+  } demo_singleline;
   struct {
     HMM_Vec2 camera_position;
     float    camera_zoom = 1.0f;
@@ -85,6 +85,7 @@ struct App_State {
     bool             mouse_captured;
     float            mouse_sensitivity = 0.00085f;
     float            move_speed        = 500.0f;
+    bool             fog_enabled       = true;
   } demo_static;
 };
 
@@ -152,6 +153,7 @@ static void on_demo_kind_selection(App_State* as, Demo_Kind kind) {
     as->text_align.horizontal = TEXT_H_ALIGN_CENTER;
     as->text_align.vertical   = TEXT_V_ALIGN_BASELINE;
     as->text_style.color      = HMM_V4(0.024f, 0.02f, 0.019f, 1.0f);
+    as->demo_singleline.text       = "Example Text!";
     break;
   case DEMO_KIND_TEXT_BATCH_MULTILINE:
     as->font_variant    = 0;
@@ -369,7 +371,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
               FONT_ATLAS_ROBOTO_VARIANT_BOLD,
               demo_string_shakespeare,
               HMM_V3(0.0f, 0.0f, 0.0f),
-              16.0f)) {
+              128.0f)) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create text static data");
         return SDL_APP_FAILURE;
       }
@@ -482,7 +484,7 @@ static void update_and_draw_demo(App_State* as, float dt) {
         as->font_variant);
     text_batch_draw(
         &as->text_batch,
-        as->demo_basic.text,
+        as->demo_singleline.text,
         HMM_V3(as->window_size_pixels.X * 0.5f, as->window_size_pixels.Y * 0.5f, 0.0f),
         as->text_size,
         as->text_align,
@@ -647,11 +649,11 @@ static void draw_imgui(App_State* as) {
         };
         ImGui::InputText(
             "Text",
-            as->demo_basic.text.data(),
-            as->demo_basic.text.capacity() + 1,
+            as->demo_singleline.text.data(),
+            as->demo_singleline.text.capacity() + 1,
             ImGuiInputTextFlags_CallbackResize,
             resize_callback,
-            &as->demo_basic.text);
+            &as->demo_singleline.text);
 
         ImGui::SliderFloat(
             "Text Size",
@@ -670,7 +672,6 @@ static void draw_imgui(App_State* as) {
       } break;
       case DEMO_KIND_TEXT_BATCH_STARWARS: {
         ImGui::SliderFloat("Scroll Speed", &as->demo_starwars.scroll_speed, 0.0f, 200.0f, "%.0f");
-        if (ImGui::Button("Reset")) { on_demo_kind_selection(as, DEMO_KIND_TEXT_BATCH_STARWARS); }
       } break;
       case DEMO_KIND_TEXT_STATIC_SHAKESPEARE: {
         ImGui::Text("Controls: WSAD to move, Mouse move to aim.");
@@ -691,12 +692,15 @@ static void draw_imgui(App_State* as) {
             0.005f,
             "%.5f");
         ImGui::SliderFloat("Move Speed", &as->demo_static.move_speed, 100.0f, 10000.0f);
+
+        ImGui::Checkbox("Fog Enabled", &as->demo_static.fog_enabled);
       } break;
       default:
         break;
       }
     }
 
+    if (ImGui::Button("Reset")) { on_demo_kind_selection(as, as->demo_kind); }
     ImGui::ColorEdit4("Text Color", &as->text_style.color.X);
     ImGui::ColorEdit4("Text Outline Color", &as->text_style.outline_color.X);
     ImGui::SliderFloat(
@@ -901,6 +905,8 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
             as->demo_static.text_static_data,
             view_to_clip_transform,
             as->demo_static.camera_position,
+            as->demo_static.fog_enabled,
+            as->bg_color,
             as->text_style);
       }
 
