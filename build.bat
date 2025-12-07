@@ -14,10 +14,10 @@ if "%skipfonts%"=="1" echo [skipping font atlas generation]
 :: None for now...
 
 :: --- Compile/Link Definitions -----------------------------------------------
-set cl_common=/nologo /MD /EHsc /std:c++17 ^
+set cl_common=/nologo /EHsc /std:c++17 ^
               /I..\src /I..\extern\HandmadeMath /I..\extern\SDL3\include /I..\extern\imgui /I..\extern\nlohmann /I..\extern\stb
-set cl_debug=call cl /Zi /Od /DBUILD_DEBUG %cl_common%
-set cl_release=call cl /O2 %cl_common%
+set cl_debug=call cl /MDd /Zi /Od /DBUILD_DEBUG %cl_common%
+set cl_release=call cl /MD /O2 %cl_common%
 set cl_link=/link ..\extern\SDL3\lib\x64\SDL3.lib shell32.lib /subsystem:console
 if "%debug%"=="1" set cl_compile=%cl_debug%
 if "%release%"=="1" set cl_compile=%cl_release%
