@@ -1,67 +1,7 @@
-enum Font_Atlas_Kind {
-  FONT_ATLAS_KIND_ROBOTO,
-  FONT_ATLAS_KIND_SCIENCE_GOTHIC,
-  FONT_ATLAS_KIND_LIMELIGHT,
-  FONT_ATLAS_KIND_COUNT,
-};
-
-enum Font_Atlas_Roboto_Variant {
-  FONT_ATLAS_ROBOTO_VARIANT_REGULAR,
-  FONT_ATLAS_ROBOTO_VARIANT_BOLD,
-  FONT_ATLAS_ROBOTO_VARIANT_ITALIC,
-  FONT_ATLAS_ROBOTO_VARIANT_BOLD_ITALIC,
-  FONT_ATLAS_ROBOTO_VARIANT_LIGHT,
-  FONT_ATLAS_ROBOTO_VARIANT_COUNT,
-};
-
-enum Font_Atlas_Science_Gothic_Variant {
-  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_REGULAR,
-  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_BOLD,
-  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_LIGHT,
-  FONT_ATLAS_SCIENCE_GOTHIC_VARIANT_COUNT,
-};
-
-struct Font_Glyph_Bounds {
-  float left;
-  float bottom;
-  float right;
-  float top;
-};
-
-struct Font_Glyph {
-  int               unicode;
-  float             horizontal_advance;
-  Font_Glyph_Bounds plane_bounds;
-  Font_Glyph_Bounds atlas_bounds;
-};
-
-struct Font_Kerning {
-  int   unicode1;
-  int   unicode2;
-  float advance;
-};
-
-struct Font_Atlas_Variant {
-  std::unordered_map<int, Font_Glyph> glyphs;
-  std::unordered_map<uint64_t, float> kernings;
-  float                               line_height;
-  float                               ascender;
-  float                               descender;
-};
-
-struct Font_Atlas {
-  std::vector<Font_Atlas_Variant> variants;
-  float                           distance_range;
-  float                           size;
-  int                             width;
-  int                             height;
-  SDL_GPUTexture*                 texture;
-};
-
-static uint64_t font_atlas_pack_kerning(int unicode1, int unicode2) {
-  return static_cast<uint64_t>(static_cast<uint32_t>(unicode1)) << 32 |
-         static_cast<uint32_t>(unicode2);
-}
+#include "font_atlas.h"
+#include "util.h"
+#include <json.hpp>
+#include <stb_image.h>
 
 void from_json(const nlohmann::json& j, Font_Glyph_Bounds& bounds) {
   j.at("left").get_to(bounds.left);
@@ -115,12 +55,17 @@ void from_json(const nlohmann::json& j, Font_Atlas& font_atlas) {
   }
 }
 
-static bool font_atlas_load(
-    Font_Atlas*        font_atlas,
-    Font_Atlas_Kind    kind,
-    const std::string& base_path,
-    SDL_GPUDevice*     device,
-    SDL_GPUCopyPass*   copy_pass) {
+uint64_t font_atlas_pack_kerning(int unicode1, int unicode2) {
+  return static_cast<uint64_t>(static_cast<uint32_t>(unicode1)) << 32 |
+         static_cast<uint32_t>(unicode2);
+}
+
+bool font_atlas_load(
+    Font_Atlas*      font_atlas,
+    Font_Atlas_Kind  kind,
+    SDL_Storage*     storage,
+    SDL_GPUDevice*   device,
+    SDL_GPUCopyPass* copy_pass) {
   SDL_assert(font_atlas != nullptr);
   SDL_assert(device != nullptr);
   SDL_assert(copy_pass != nullptr);
@@ -132,12 +77,12 @@ static bool font_atlas_load(
   };
   auto atlas_name = font_atlas_kind_names[kind];
 
-  auto        json_file_path = base_path + "/res/" + atlas_name + ".json";
+  std::string json_file_path = std::string("res/") + atlas_name + ".json";
   std::string json_file_contents;
-  if (!read_file_contents(json_file_path, &json_file_contents)) {
+  if (!read_storage_file(storage, json_file_path.c_str(), &json_file_contents)) {
     SDL_LogError(
         SDL_LOG_CATEGORY_APPLICATION,
-        "Failed to read file contents: %s",
+        "Failed to read json file contents: %s",
         json_file_path.c_str());
     return false;
   }
@@ -150,9 +95,18 @@ static bool font_atlas_load(
     return false;
   }
 
-  int  x, y, n;
-  auto png_file_path = base_path + "/res/" + atlas_name + ".png";
-  auto pixels        = stbi_load(png_file_path.c_str(), &x, &y, &n, 4);
+  int                  x, y, n;
+  std::string          png_file_path = std::string("res/") + atlas_name + ".png";
+  std::vector<uint8_t> png_file_contents;
+  if (!read_storage_file(storage, png_file_path.c_str(), &png_file_contents)) {
+    SDL_LogError(
+        SDL_LOG_CATEGORY_APPLICATION,
+        "Failed to read png file contents: %s",
+        json_file_path.c_str());
+    return false;
+  }
+  auto pixels =
+      stbi_load_from_memory(png_file_contents.data(), png_file_contents.size(), &x, &y, &n, 4);
   if (pixels == nullptr) {
     SDL_LogError(
         SDL_LOG_CATEGORY_APPLICATION,
@@ -174,7 +128,7 @@ static bool font_atlas_load(
     font_atlas->texture           = SDL_CreateGPUTexture(device, &info);
     if (font_atlas->texture == nullptr) {
       SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create texture: %s", SDL_GetError());
-      return nullptr;
+      return false;
     }
   }
 
@@ -217,7 +171,7 @@ static bool font_atlas_load(
   return true;
 }
 
-static void font_atlas_destroy(Font_Atlas* font_atlas, SDL_GPUDevice* device) {
+void font_atlas_destroy(Font_Atlas* font_atlas, SDL_GPUDevice* device) {
   SDL_assert(device != nullptr);
 
   SDL_ReleaseGPUTexture(device, font_atlas->texture);

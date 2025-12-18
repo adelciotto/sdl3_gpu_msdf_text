@@ -1,32 +1,41 @@
-static constexpr int TEXT_INDICES_PER_GLYPH = 6;
+#include "util.h"
+#include "font_atlas.h"
+#include <string>
+#include <vector>
 
-enum Text_H_Align {
-  TEXT_H_ALIGN_LEFT,
-  TEXT_H_ALIGN_CENTER,
-  TEXT_H_ALIGN_RIGHT,
-  TEXT_H_ALIGN_COUNT,
-};
+// -- Storage -----------------------------------------------------------------
 
-enum Text_V_Align {
-  TEXT_V_ALIGN_TOP,
-  TEXT_V_ALIGN_MIDDLE,
-  TEXT_V_ALIGN_BASELINE,
-  TEXT_V_ALIGN_BOTTOM,
-  TEXT_V_ALIGN_COUNT,
-};
+template<typename Container>
+bool read_storage_file(SDL_Storage* storage, const char* file_path, Container* out_container) {
+  uint64_t file_size = 0;
+  if (!SDL_GetStorageFileSize(storage, file_path, &file_size)) {
+    SDL_LogError(
+        SDL_LOG_CATEGORY_APPLICATION,
+        "Failed to get storage file size: %s",
+        SDL_GetError());
+    return false;
+  }
+  if (file_size == 0) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to get storage file size: file size is 0");
+    return false;
+  }
 
-struct Text_Align {
-  Text_H_Align horizontal = TEXT_H_ALIGN_LEFT;
-  Text_V_Align vertical   = TEXT_V_ALIGN_TOP;
-};
+  out_container->resize(file_size);
+  if (!SDL_ReadStorageFile(storage, file_path, out_container->data(), file_size)) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to read storage file: %s", SDL_GetError());
+    return false;
+  }
 
-struct Text_Style {
-  HMM_Vec4 color             = HMM_V4(0.0f, 0.0f, 0.0f, 1.0f);
-  HMM_Vec4 outline_color     = HMM_V4(1.0f, 1.0f, 1.0f, 1.0f);
-  float    outline_thickness = 0.0f;
-};
+  return true;
+}
 
-static float text_measure_width(
+template bool read_storage_file<std::string>(SDL_Storage*, const char*, std::string*);
+template bool
+read_storage_file<std::vector<uint8_t>>(SDL_Storage*, const char*, std::vector<uint8_t>*);
+
+// -- Text --------------------------------------------------------------------
+
+float text_measure_width(
     const Font_Atlas_Variant& font_atlas_variant,
     std::string_view          text,
     float                     size) {
@@ -54,7 +63,7 @@ static float text_measure_width(
   return width;
 }
 
-static HMM_Vec2 text_measure_string_size(
+HMM_Vec2 text_measure_string_size(
     const Font_Atlas_Variant& font_atlas_variant,
     std::string_view          text,
     float                     size) {

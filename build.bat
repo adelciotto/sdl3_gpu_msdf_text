@@ -59,7 +59,11 @@ if "%buildfonts%"=="1" (
 %shadercross_fragment% ..\src\text_batch.hlsl -o res\text_batch.frag.dxil || exit /b 1
 %shadercross_vertex% ..\src\text_static.hlsl -o res\text_static.vert.dxil || exit /b 1
 %shadercross_fragment% ..\src\text_static.hlsl -o res\text_static.frag.dxil || exit /b 1
-%cl_compile% ..\src\sdl3_gpu_msdf_text.cpp ^
+%cl_compile% ..\src\font_atlas.cpp ^
+             ..\src\main.cpp ^
+             ..\src\text_batch.cpp ^
+             ..\src\text_static.cpp ^
+             ..\src\util.cpp ^
              ..\extern\imgui\imgui.cpp ^
              ..\extern\imgui\imgui_demo.cpp ^
              ..\extern\imgui\imgui_draw.cpp ^

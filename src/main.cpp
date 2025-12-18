@@ -1,4 +1,7 @@
-// -- External Header Includes ------------------------------------------------
+#include "imgui_font.h"
+#include "demo_strings.h"
+#include "text_batch.h"
+#include "text_static.h"
 #include <HandmadeMath.h>
 #include <SDL3/SDL.h>
 #define SDL_MAIN_USE_CALLBACKS 1
@@ -9,19 +12,6 @@
 #include <json.hpp>
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
-
-// -- Std Header Includes -----------------------------------------------------
-#include <unordered_map>
-#include <vector>
-
-// -- Local Source Includes ---------------------------------------------------
-#include "common.cpp"
-#include "imgui_font.cpp"
-#include "demo_strings.cpp"
-#include "font_atlas.cpp"
-#include "text.cpp"
-#include "text_batch.cpp"
-#include "text_static.cpp"
 
 // TODOs:
 // - MSDFA atlases and a blur effect example.
@@ -36,7 +26,7 @@ enum Demo_Kind {
 };
 
 struct App_State {
-  std::string          base_path;
+  SDL_Storage*         title_storage;
   SDL_GPUDevice*       device;
   SDL_Window*          window;
   SDL_GPUTextureFormat swapchain_texture_format;
@@ -220,7 +210,21 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
   }
   *appstate = as;
 
-  as->base_path = SDL_GetBasePath();
+  auto base_path_ptr = SDL_GetBasePath();
+  if (base_path_ptr == nullptr) {
+    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to get base path: %s", SDL_GetError());
+    return SDL_APP_FAILURE;
+  }
+  std::string base_path = base_path_ptr;
+  as->title_storage     = SDL_OpenTitleStorage(base_path.c_str(), 0);
+  if (as->title_storage == nullptr) {
+    SDL_LogError(
+        SDL_LOG_CATEGORY_APPLICATION,
+        "Failed to get open title stotage: %s",
+        SDL_GetError());
+    return SDL_APP_FAILURE;
+  }
+  while (!SDL_StorageReady(as->title_storage)) { SDL_Delay(1); }
 
   SDL_GPUShaderFormat format_flags = 0;
 #ifdef SDL_PLATFORM_WINDOWS
@@ -309,7 +313,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
 
   if (!text_batch_create(
           &as->text_batch,
-          as->base_path,
+          as->title_storage,
           as->device,
           as->swapchain_texture_format)) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create text batch");
@@ -318,7 +322,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
 
   if (!text_static_create(
           &as->text_static,
-          as->base_path,
+          as->title_storage,
           as->device,
           as->swapchain_texture_format)) {
     SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to create text static");
@@ -344,7 +348,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
         if (!font_atlas_load(
                 &as->font_atlases[i],
                 static_cast<Font_Atlas_Kind>(i),
-                as->base_path,
+                as->title_storage,
                 as->device,
                 copy_pass)) {
           SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load font atlas");
@@ -354,12 +358,11 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char* argv[]) {
 
       std::string demo_string_shakespeare;
       {
-        auto file_path = as->base_path + "/res/shakespeare.txt";
-        if (!read_file_contents(file_path, &demo_string_shakespeare)) {
-          SDL_LogError(
-              SDL_LOG_CATEGORY_APPLICATION,
-              "Failed to read file contents: %s",
-              file_path.c_str());
+        if (!read_storage_file(
+                as->title_storage,
+                "res/shakespeare.txt",
+                &demo_string_shakespeare)) {
+          SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to read shakespeare file contents");
           return SDL_APP_FAILURE;
         }
       }

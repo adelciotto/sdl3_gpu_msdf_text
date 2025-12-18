@@ -1,54 +1,13 @@
-static constexpr int TEXT_BATCH_MAX_DRAW_CMDS           = 8;
-static constexpr int TEXT_BATCH_MAX_GLYPHS_PER_DRAW_CMD = 8192;
-static constexpr int TEXT_BATCH_MAX_GLYPHS =
-    TEXT_BATCH_MAX_DRAW_CMDS * TEXT_BATCH_MAX_GLYPHS_PER_DRAW_CMD;
+#include "text_batch.h"
+#include <string>
 
-struct Text_Batch_Glyph {
-  HMM_Vec3 position;
-  float    size;
-  HMM_Vec4 plane_bounds;
-  HMM_Vec4 atlas_bounds;
-  HMM_Vec4 color;
-  HMM_Vec4 outline_color;
-  float    outline_thickness;
-};
-
-struct Text_Batch_Draw_Cmd {
-  HMM_Mat4          world_to_clip_transform;
-  const Font_Atlas* font_atlas;
-  int               font_variant;
-  int               first_glyph;
-  int               glyphs_count;
-};
-
-struct Text_Batch {
-  Text_Batch_Draw_Cmd      draw_cmds[TEXT_BATCH_MAX_DRAW_CMDS];
-  int                      draw_cmds_count;
-  Text_Batch_Glyph         glyphs[TEXT_BATCH_MAX_GLYPHS];
-  int                      total_glyphs_count;
-  bool                     begin_called;
-  SDL_GPUBuffer*           data_buffer;
-  SDL_GPUTransferBuffer*   transfer_buffer;
-  SDL_GPUGraphicsPipeline* pipeline;
-  SDL_GPUSampler*          sampler;
-};
-
-struct Text_Batch_Vertex_Uniforms {
-  HMM_Mat4 world_to_clip_transform;
-  uint32_t first_glyph;
-};
-
-struct Text_Batch_Fragment_Uniforms {
-  float    font_size;
-  HMM_Vec2 unit_range;
-};
-
-static bool text_batch_create(
+bool text_batch_create(
     Text_Batch*          text_batch,
-    const std::string&   base_path,
+    SDL_Storage*         storage,
     SDL_GPUDevice*       device,
     SDL_GPUTextureFormat swapchain_texture_format) {
   SDL_assert(text_batch != nullptr);
+  SDL_assert(storage != nullptr);
   SDL_assert(device != nullptr);
 
   {
@@ -99,9 +58,9 @@ static bool text_batch_create(
 
     SDL_GPUShader* vertex_shader;
     {
-      auto                 file_path = base_path + "/res/text_batch.vert." + file_ext;
+      std::string          file_path = std::string("res/text_batch.vert.") + file_ext;
       std::vector<uint8_t> file_contents;
-      if (!read_file_contents(file_path.c_str(), &file_contents)) {
+      if (!read_storage_file(storage, file_path.c_str(), &file_contents)) {
         SDL_LogError(
             SDL_LOG_CATEGORY_APPLICATION,
             "Failed to read file contents: %s",
@@ -130,9 +89,9 @@ static bool text_batch_create(
 
     SDL_GPUShader* fragment_shader;
     {
-      auto                 file_path = base_path + "/res/text_batch.frag." + file_ext;
+      std::string          file_path = std::string("res/text_batch.frag.") + file_ext;
       std::vector<uint8_t> file_contents;
-      if (!read_file_contents(file_path.c_str(), &file_contents)) {
+      if (!read_storage_file(storage, file_path.c_str(), &file_contents)) {
         SDL_LogError(
             SDL_LOG_CATEGORY_APPLICATION,
             "Failed to read file contents: %s",
@@ -204,7 +163,7 @@ static bool text_batch_create(
   return true;
 }
 
-static void text_batch_destroy(Text_Batch* text_batch, SDL_GPUDevice* device) {
+void text_batch_destroy(Text_Batch* text_batch, SDL_GPUDevice* device) {
   SDL_assert(text_batch != nullptr);
   SDL_assert(device != nullptr);
 
@@ -233,7 +192,7 @@ static Text_Batch_Draw_Cmd* text_batch_push_draw_cmd(
   return draw_cmd;
 }
 
-static void text_batch_begin(
+void text_batch_begin(
     Text_Batch*       text_batch,
     const HMM_Mat4&   world_to_clip_transform,
     const Font_Atlas* font_atlas,
@@ -248,7 +207,7 @@ static void text_batch_begin(
   text_batch_push_draw_cmd(text_batch, world_to_clip_transform, font_atlas, font_variant);
 }
 
-static void text_batch_end(Text_Batch* text_batch) {
+void text_batch_end(Text_Batch* text_batch) {
   SDL_assert(text_batch != nullptr);
   SDL_assert(text_batch->begin_called);
 
@@ -322,13 +281,13 @@ static void text_batch_draw_internal(
   }
 }
 
-static void text_batch_draw(
+void text_batch_draw(
     Text_Batch*       text_batch,
     std::string_view  text,
     HMM_Vec3          position,
     float             size,
-    const Text_Align& align = {},
-    const Text_Style& style = {}) {
+    const Text_Align& align,
+    const Text_Style& style) {
   SDL_assert(text_batch != nullptr);
   SDL_assert(text_batch->begin_called);
 
@@ -339,7 +298,6 @@ static void text_batch_draw(
   switch (align.horizontal) {
   case TEXT_H_ALIGN_CENTER:
     current_position.X -= text_measure_width(font_data, text, size) * 0.5f;
-    0.5f;
     break;
   case TEXT_H_ALIGN_RIGHT:
     current_position.X -= text_measure_width(font_data, text, size);
@@ -366,14 +324,14 @@ static void text_batch_draw(
   text_batch_draw_internal(text_batch, font_data, text, current_position, size, style);
 }
 
-static void text_batch_draw_multiline(
+void text_batch_draw_multiline(
     Text_Batch*       text_batch,
     std::string_view  text,
     HMM_Vec3          position,
     float             size,
-    const Text_Align& align           = {},
-    const Text_Style& style           = {},
-    HMM_Vec2          text_block_size = HMM_V2(-1.0f, -1.0f)) {
+    const Text_Align& align,
+    const Text_Style& style,
+    HMM_Vec2          text_block_size) {
   SDL_assert(text_batch != nullptr);
   SDL_assert(text_batch->begin_called);
 
@@ -441,7 +399,7 @@ static void text_batch_draw_multiline(
   if (ptr > line_start) { draw_line({line_start, static_cast<size_t>(ptr - line_start)}); }
 }
 
-static void text_batch_prepare_draw_cmds(
+void text_batch_prepare_draw_cmds(
     Text_Batch*           text_batch,
     SDL_GPUDevice*        device,
     SDL_GPUCommandBuffer* cmd_buf) {
@@ -483,7 +441,7 @@ static void text_batch_prepare_draw_cmds(
   }
 }
 
-static void text_batch_render_draw_cmds(
+void text_batch_render_draw_cmds(
     Text_Batch*           text_batch,
     SDL_GPUCommandBuffer* cmd_buf,
     SDL_GPURenderPass*    render_pass) {
