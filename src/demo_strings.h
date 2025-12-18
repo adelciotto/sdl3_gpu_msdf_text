@@ -1,3 +1,5 @@
+#pragma once
+
 constexpr const char* demo_string_lorem_ipsum =
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus a nisi lacus. Suspendisse et "
     "tellus libero. Sed\n"
