@@ -1,6 +1,7 @@
 // clang-format off
 // File: 'Roboto-Medium.ttf' (162588 bytes)
 // Exported using binary_to_compressed_c.exe -u8 "Roboto-Medium.ttf" imgui_font
+#pragma once
 constexpr unsigned int IMGUI_FONT_DATA_SIZE = 115741;
 constexpr unsigned char IMGUI_FONT_DATA[IMGUI_FONT_DATA_SIZE] =
 {
