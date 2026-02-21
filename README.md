@@ -10,7 +10,7 @@ The texture atlases are generated at build time using Chlumsky's [msdf-atlas-gen
   <img src="screenshots/demo_star_wars.png" width="30%">
 </p>
 
-[Demo Video 1](https://anthonydelciotto.com/media/sdl3_gpu_msdf_text.mp4) [Demo Video 2](https://anthonydelciotto.com/media/sdl3_gpu_msdf_text_shakespeare.mp4)
+[videos/sdl3_gpu_msdf_text.mp4](videos/sdl3_gpu_msdf_text.mp4)
 
 ## Build
 
